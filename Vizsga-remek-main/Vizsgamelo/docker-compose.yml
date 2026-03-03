@@ -1,0 +1,77 @@
+services:
+  # 1) FRONTEND (React + Vite)
+  frontend:
+    container_name: exploree_frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - api
+    stdin_open: true
+    tty: true
+    ports:
+      - "8100:5173"
+    restart: unless-stopped
+
+  # 2) DATABASE (MySQL)
+  db:
+    image: mysql:8.4
+    container_name: exploree_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpw
+      MYSQL_DATABASE: exploree
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppw
+    ports:
+      - "3307:3306"
+    volumes:
+      - exploree_db_data:/var/lib/mysql
+      - ./db_init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpw"]
+      interval: 10s
+      timeout: 20s
+      retries: 10
+
+  # 3) PHPMYADMIN
+  phpmyadmin:
+    image: phpmyadmin
+    container_name: exploree_phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8101:80"
+    environment:
+      PMA_HOST: db
+      PMA_USER: root
+      PMA_PASSWORD: rootpw
+      PMA_ARBITRARY: 1
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 4) BACKEND API (Node.js)
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: exploree_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: rootpw
+      DB_DATABASE: exploree
+      PORT: 5050
+      # JWT_SECRET: vizsga_secret  # ha akarod, feloldhatod
+    ports:
+      - "5050:5050"
+    restart: unless-stopped
+    # Profilképek ne vesszenek el restartnál:
+    volumes:
+      - ./backend/uploads:/app/uploads
+
+volumes:
+  exploree_db_data:
