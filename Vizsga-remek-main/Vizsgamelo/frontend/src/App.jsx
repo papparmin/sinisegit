@@ -1,4 +1,3 @@
-// frontend/src/App.jsx
 import React, { useContext, useEffect, useMemo, useState } from "react";
 import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 
@@ -12,20 +11,18 @@ import Home from "./pages/Home.jsx";
 import Turak from "./pages/Turak.jsx";
 import Berles from "./pages/Berles.jsx";
 import Foglalas from "./pages/Foglalas.jsx";
+import Uzemeltetok from "./pages/Uzemeltetok.jsx";
+import Galeria from "./pages/Galeria.jsx";
 
 // Legal
 import Aszf from "./pages/Aszf.jsx";
 import Adatvedelem from "./pages/Adatvedelem.jsx";
 import Impresszum from "./pages/Impresszum.jsx";
 
-// ------------------------------
-// Route Guard
-// ------------------------------
 function RequireAuth({ authed, onNeedAuth, children }) {
   const location = useLocation();
 
   if (!authed) {
-    // Nyissuk meg a belépést és mentsük el, hova akart menni
     onNeedAuth?.(location.pathname);
     return <Navigate to="/" replace />;
   }
@@ -47,15 +44,12 @@ export default function App() {
     setAuthOpen(true);
   };
 
-  // Ha sikerült belépni, zárjuk a modalt és dobjuk oda, ahova akart menni
   useEffect(() => {
     if (!authed) return;
     if (!authOpen && !afterLoginPath) return;
 
-    // ha épp nyitva volt, csukjuk be
     if (authOpen) setAuthOpen(false);
 
-    // redirect ha volt cél
     if (afterLoginPath) {
       const target = afterLoginPath;
       setAfterLoginPath("");
@@ -64,7 +58,6 @@ export default function App() {
   }, [authed, authOpen, afterLoginPath, navigate]);
 
   const handleNeedAuth = (path) => {
-    // Ne nyitogassa újra végtelenül ugyanarra
     if (!authOpen) openAuth(path);
   };
 
@@ -78,8 +71,9 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/turak" element={<Turak />} />
         <Route path="/berles" element={<Berles />} />
+        <Route path="/uzemeltetok" element={<Uzemeltetok />} />
+        <Route path="/galeria" element={<Galeria />} />
 
-        {/* Protected */}
         <Route
           path="/foglalas"
           element={
@@ -89,12 +83,10 @@ export default function App() {
           }
         />
 
-        {/* Legal */}
         <Route path="/aszf" element={<Aszf />} />
         <Route path="/adatvedelem" element={<Adatvedelem />} />
         <Route path="/impresszum" element={<Impresszum />} />
 
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

@@ -1,4 +1,3 @@
-// frontend/src/components/Navbar/Navbar.jsx
 import React, { useContext, useMemo, useState, useEffect, useRef } from "react";
 import { NavLink, Link } from "react-router-dom";
 import "./Navbar.css";
@@ -34,13 +33,8 @@ export default function Navbar({ onOpenAuth }) {
   }, []);
 
   const openAuth = (e) => {
-    // Biztosra megyünk: ne “szivárogjon” sehová a click
     e?.preventDefault?.();
     e?.stopPropagation?.();
-
-    console.log("✅ Navbar: Belépés click -> onOpenAuth hívás");
-    alert("Belépés click OK"); // DEBUG: ha ezt látod, akkor a click biztos lefut
-
     onOpenAuth?.();
   };
 
@@ -68,6 +62,12 @@ export default function Navbar({ onOpenAuth }) {
           </NavLink>
           <NavLink to="/berles" className={navClass}>
             Bérlés
+          </NavLink>
+          <NavLink to="/galeria" className={navClass}>
+            Galéria
+          </NavLink>
+          <NavLink to="/uzemeltetok" className={navClass}>
+            Üzemeltetők
           </NavLink>
           <NavLink to="/foglalas" className={navClass}>
             Foglalás
