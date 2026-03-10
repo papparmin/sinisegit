@@ -1,127 +1,165 @@
-import React, { useState } from "react";
+import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import "./HelyszinekTerkep.css";
 import hungaryMap from "../assets/hungary-map.png";
 
 const locations = [
-  { id: 1, name: "Sopron", type: "Bicikli", x: 16, y: 34 },
-  { id: 2, name: "Őrség", type: "Túra", x: 18, y: 53 },
-  { id: 3, name: "Badacsony", type: "Túra", x: 31, y: 55 },
-  { id: 4, name: "Tihany", type: "SUP", x: 36, y: 55 },
-  { id: 5, name: "Balatonfüred", type: "SUP", x: 38, y: 53.5 },
-  { id: 6, name: "Velencei-tó", type: "SUP", x: 43, y: 45.5 },
-  { id: 7, name: "Dunakanyar", type: "Túra", x: 41, y: 28 },
-  { id: 8, name: "Pilis", type: "Túra", x: 43, y: 31 },
-  { id: 9, name: "Dobogókő", type: "Túra", x: 44.5, y: 29.5 },
-  { id: 10, name: "Kékestető", type: "Túra", x: 54.5, y: 30 },
-  { id: 11, name: "Bükk-fennsík", type: "Túra", x: 62, y: 29 },
-  { id: 12, name: "Aggtelek", type: "Túra", x: 72.5, y: 26 },
-  { id: 13, name: "Tisza-tó", type: "Horgászat", x: 58.5, y: 41.5 },
-  { id: 14, name: "Hortobágy", type: "Futás", x: 68, y: 37.5 },
-  { id: 15, name: "Debrecen", type: "Futás", x: 77.5, y: 39.5 },
-  { id: 16, name: "Mecsek", type: "Túra", x: 39.5, y: 76 },
-  { id: 17, name: "Pécs", type: "Bicikli", x: 37, y: 79.5 },
-  { id: 18, name: "Szeged", type: "Futás", x: 61.5, y: 82 },
+  { id: 1, name: "Sopron", type: "Bicikli", x: 16.6, y: 35.6 },
+  { id: 2, name: "Őrség", type: "Túra", x: 18.4, y: 55.0 },
+
+  { id: 3, name: "Badacsony", type: "Túra", x: 31.0, y: 56.2 },
+  { id: 4, name: "Tihany", type: "SUP", x: 36.0, y: 56.1 },
+  { id: 5, name: "Balatonfüred", type: "SUP", x: 38.3, y: 54.9 },
+  { id: 6, name: "Velencei-tó", type: "SUP", x: 43.2, y: 46.8 },
+
+  { id: 7, name: "Dunakanyar", type: "Túra", x: 42.7, y: 30.6 },
+  { id: 8, name: "Pilis", type: "Túra", x: 44.8, y: 32.8 },
+  { id: 9, name: "Dobogókő", type: "Túra", x: 45.8, y: 31.5 },
+
+  { id: 10, name: "Kékestető", type: "Túra", x: 54.8, y: 32.0 },
+  { id: 11, name: "Bükk-fennsík", type: "Túra", x: 62.4, y: 31.1 },
+  { id: 12, name: "Aggtelek", type: "Túra", x: 72.8, y: 27.8 },
+
+  { id: 13, name: "Tisza-tó", type: "Horgászat", x: 59.0, y: 42.8 },
+  { id: 14, name: "Hortobágy", type: "Futás", x: 68.8, y: 40.8 },
+  { id: 15, name: "Debrecen", type: "Futás", x: 77.8, y: 42.3 },
+
+  { id: 16, name: "Mecsek", type: "Túra", x: 40.8, y: 75.4 },
+  { id: 17, name: "Pécs", type: "Bicikli", x: 38.5, y: 78.8 },
+  { id: 18, name: "Szeged", type: "Futás", x: 62.0, y: 81.6 },
 ];
 
-const TYPE_CONFIG = {
-  "Túra": { class: "trail", label: "Túra" },
-  "SUP": { class: "sup", label: "SUP" },
-  "Bicikli": { class: "bike", label: "Bicikli" },
-  "Horgászat": { class: "fish", label: "Horgászat" },
-  "Futás": { class: "run", label: "Futás" },
-};
+const legend = [
+  { label: "Túra", cls: "trail" },
+  { label: "SUP", cls: "sup" },
+  { label: "Bicikli", cls: "bike" },
+  { label: "Horgászat", cls: "fish" },
+  { label: "Futás", cls: "run" },
+];
+
+function getTypeClass(type) {
+  switch (type) {
+    case "Túra":
+      return "trail";
+    case "SUP":
+      return "sup";
+    case "Bicikli":
+      return "bike";
+    case "Horgászat":
+      return "fish";
+    case "Futás":
+      return "run";
+    default:
+      return "trail";
+  }
+}
 
 export default function HelyszinekTerkep() {
-  const [activePin, setActivePin] = useState(null);
+  const navigate = useNavigate();
 
-  // Dinamikus statisztikák számítása
-  const totalLocations = locations.length;
-  const uniqueTypes = new Set(locations.map(l => l.type)).size;
+  useEffect(() => {
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, []);
 
   return (
     <section className="map-page">
-      <div className="map-bg-glow map-bg-glow-1" />
-      <div className="map-bg-glow map-bg-glow-2" />
+      <div className="map-glow map-glow-left" />
+      <div className="map-glow map-glow-right" />
 
-      <div className="map-shell">
+      <div className="map-wrap">
+        <div className="map-topbar">
+          <button
+            type="button"
+            className="map-back-btn"
+            onClick={() => navigate(-1)}
+          >
+            ← Vissza
+          </button>
+        </div>
+
         <header className="map-header">
           <span className="map-badge">Eddigi helyszíneink</span>
           <h1>Magyarország térkép</h1>
           <p>
-            Vidd rá az egeret a pontokra, vagy koppints rájuk, és nézd meg, merre jártunk már 
-            aktívan kikapcsolódni.
+            Vidd rá az egeret a pontokra, és nézd meg, merre jártunk már
+            túrázni, SUP-ozni, biciklizni, futni vagy horgászni.
           </p>
         </header>
 
-        <div className="map-layout">
-          <div className="map-card">
-            <div className="map-card-topline" />
-            <div className="hungary-map-real">
-              <img
-                src={hungaryMap}
-                alt="Magyarország domborzati térképe"
-                className="hungary-map-image"
-                loading="lazy"
-              />
+        <section className="map-card">
+          <div className="map-card-topline" />
 
-              {locations.map((loc) => (
-                <button
-                  key={loc.id}
-                  type="button"
-                  className={`map-pin ${TYPE_CONFIG[loc.type]?.class || "trail"} ${activePin === loc.id ? "active" : ""}`}
-                  style={{ left: `${loc.x}%`, top: `${loc.y}%` }}
-                  onMouseEnter={() => setActivePin(loc.id)}
-                  onMouseLeave={() => setActivePin(null)}
-                  onClick={() => setActivePin(activePin === loc.id ? null : loc.id)}
-                  aria-label={`${loc.name} - ${loc.type}`}
-                >
-                  <span className="map-pin-core" />
-                  <span className="map-tooltip">
-                    <strong>{loc.name}</strong>
-                    <small>{loc.type}</small>
-                  </span>
-                </button>
+          <div className="map-visual">
+            <img
+              src={hungaryMap}
+              alt="Magyarország domborzati térképe"
+              className="map-image"
+              draggable="false"
+            />
+
+            {locations.map((location) => (
+              <button
+                key={location.id}
+                type="button"
+                className={`map-pin ${getTypeClass(location.type)}`}
+                style={{ left: `${location.x}%`, top: `${location.y}%` }}
+                aria-label={`${location.name} - ${location.type}`}
+              >
+                <span className="map-pin-dot" />
+                <span className="map-tooltip">
+                  <strong>{location.name}</strong>
+                  <small>{location.type}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="map-bottom-grid">
+          <div className="map-info-card">
+            <h2>Mit jelentenek a pontok?</h2>
+            <p>
+              Minden pötty egy korábbi helyszínt jelöl. Hovernél megjelenik a
+              helyszín neve és a hozzá tartozó aktivitás.
+            </p>
+          </div>
+
+          <div className="map-legend-card">
+            <h3>Kategóriák</h3>
+            <div className="map-legend-list">
+              {legend.map((item) => (
+                <div key={item.label} className="map-legend-item">
+                  <span className={`map-legend-dot ${item.cls}`} />
+                  <span>{item.label}</span>
+                </div>
               ))}
             </div>
           </div>
 
-          <aside className="map-sidepanel">
-            <div className="map-info-card">
-              <h2>Mit jelentenek a pontok?</h2>
-              <p>
-                Minden pötty egy korábbi kalandunkat jelöli. Az interaktív térképen 
-                kategóriák szerint különítettük el a helyszíneket.
-              </p>
+          <div className="map-stats-card">
+            <div className="map-stat">
+              <strong>18</strong>
+              <span>helyszín</span>
             </div>
-
-            <div className="map-legend-card">
-              <h3>Kategóriák</h3>
-              <div className="legend-list">
-                {Object.entries(TYPE_CONFIG).map(([key, value]) => (
-                  <div className="legend-item" key={key}>
-                    <span className={`legend-dot ${value.class}`} />
-                    <span>{value.label}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="map-stat">
+              <strong>5</strong>
+              <span>aktivitás</span>
             </div>
-
-            <div className="map-stats-card">
-              <div className="map-stat">
-                <strong>{totalLocations}</strong>
-                <span>helyszín</span>
-              </div>
-              <div className="map-stat">
-                <strong>{uniqueTypes}</strong>
-                <span>aktivitás</span>
-              </div>
-              <div className="map-stat">
-                <strong>100%</strong>
-                <span>élmény</span>
-              </div>
+            <div className="map-stat">
+              <strong>Explore</strong>
+              <span>élmények</span>
             </div>
-          </aside>
-        </div>
+          </div>
+        </section>
       </div>
     </section>
   );
