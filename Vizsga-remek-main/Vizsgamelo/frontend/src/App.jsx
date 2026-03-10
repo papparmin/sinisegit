@@ -13,6 +13,7 @@ import Berles from "./pages/Berles.jsx";
 import Foglalas from "./pages/Foglalas.jsx";
 import Uzemeltetok from "./pages/Uzemeltetok.jsx";
 import Galeria from "./pages/Galeria.jsx";
+import HelyszinekTerkep from "./pages/HelyszinekTerkep";
 
 // Legal
 import Aszf from "./pages/Aszf.jsx";
@@ -73,6 +74,7 @@ export default function App() {
         <Route path="/berles" element={<Berles />} />
         <Route path="/uzemeltetok" element={<Uzemeltetok />} />
         <Route path="/galeria" element={<Galeria />} />
+        <Route path="/helyszinek-terkep" element={<HelyszinekTerkep />} />
 
         <Route
           path="/foglalas"

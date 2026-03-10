@@ -66,6 +66,9 @@ export default function Navbar({ onOpenAuth }) {
           <NavLink to="/galeria" className={navClass}>
             Galéria
           </NavLink>
+          <NavLink to="/helyszinek-terkep" className={navClass}>
+            Térkép
+          </NavLink>
           <NavLink to="/uzemeltetok" className={navClass}>
             Üzemeltetők
           </NavLink>
@@ -110,7 +113,9 @@ export default function Navbar({ onOpenAuth }) {
                 <div className="usermenu" role="menu">
                   <div className="usermenu-head">
                     <div className="usermenu-name">{displayName}</div>
-                    {user?.email ? <div className="usermenu-sub">{user.email}</div> : null}
+                    {user?.email ? (
+                      <div className="usermenu-sub">{user.email}</div>
+                    ) : null}
                   </div>
 
                   <div className="usermenu-sep" />
