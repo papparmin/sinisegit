@@ -1,5 +1,11 @@
 import React, { useContext, useEffect, useMemo, useState } from "react";
-import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
+import {
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 
 // Components
 import Navbar from "./components/Navbar/Navbar.jsx";
@@ -13,7 +19,7 @@ import Berles from "./pages/Berles.jsx";
 import Foglalas from "./pages/Foglalas.jsx";
 import Uzemeltetok from "./pages/Uzemeltetok.jsx";
 import Galeria from "./pages/Galeria.jsx";
-import HelyszinekTerkep from "./pages/HelyszinekTerkep";
+import HelyszinekTerkep from "./pages/HelyszinekTerkep.jsx";
 
 // Legal
 import Aszf from "./pages/Aszf.jsx";
@@ -70,7 +76,7 @@ export default function App() {
 
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/turak" element={<Turak />} />
+        <Route path="/turak" element={<Turak onOpenAuth={openAuth} />} />
         <Route path="/berles" element={<Berles />} />
         <Route path="/uzemeltetok" element={<Uzemeltetok />} />
         <Route path="/galeria" element={<Galeria />} />
@@ -78,6 +84,15 @@ export default function App() {
 
         <Route
           path="/foglalas"
+          element={
+            <RequireAuth authed={authed} onNeedAuth={handleNeedAuth}>
+              <Foglalas />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/foglalas/:tourId"
           element={
             <RequireAuth authed={authed} onNeedAuth={handleNeedAuth}>
               <Foglalas />

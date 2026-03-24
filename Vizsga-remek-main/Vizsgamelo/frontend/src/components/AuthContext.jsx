@@ -1,10 +1,12 @@
-import React, { createContext, useState, useEffect } from "react";
+import React, { createContext, useEffect, useState } from "react";
 
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem("exploree_token") || null);
+  const [token, setToken] = useState(
+    localStorage.getItem("exploree_token") || null
+  );
 
   useEffect(() => {
     const storedUser = localStorage.getItem("exploree_user");
