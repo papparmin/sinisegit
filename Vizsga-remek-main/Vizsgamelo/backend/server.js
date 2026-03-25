@@ -72,6 +72,28 @@ function authMiddleware(req, res, next) {
   }
 }
 
+function adminMiddleware(req, res, next) {
+  db.query(
+    "SELECT id, szerepkor FROM felhasznalok WHERE id = ? LIMIT 1",
+    [req.user.id],
+    (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: "DB hiba" });
+      }
+
+      if (!results.length) {
+        return res.status(404).json({ error: "Felhasználó nem található!" });
+      }
+
+      if (results[0].szerepkor !== "admin") {
+        return res.status(403).json({ error: "Nincs admin jogosultságod!" });
+      }
+
+      next();
+    }
+  );
+}
+
 /* =====================================
    HELPER
 ===================================== */
@@ -143,7 +165,7 @@ app.post("/api/register", async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         db.query(
-          "INSERT INTO felhasznalok (nev, email, jelszo, profilkep) VALUES (?, ?, ?, NULL)",
+          "INSERT INTO felhasznalok (nev, email, jelszo, profilkep, szerepkor) VALUES (?, ?, ?, NULL, 'user')",
           [fullName, email, hashedPassword],
           (insertErr) => {
             if (insertErr) {
@@ -331,6 +353,90 @@ app.put("/api/profile/password", authMiddleware, async (req, res) => {
     }
   );
 });
+
+/* ===== ADMIN DASHBOARD ===== */
+app.get("/api/admin/dashboard", authMiddleware, adminMiddleware, (req, res) => {
+  db.query(
+    "SELECT id, nev, email, szerepkor, profilkep FROM felhasznalok ORDER BY id DESC",
+    (err, users) => {
+      if (err) {
+        return res.status(500).json({ error: "DB hiba" });
+      }
+
+      const totalUsers = users.length;
+      const adminCount = users.filter((u) => u.szerepkor === "admin").length;
+      const normalUserCount = users.filter((u) => u.szerepkor !== "admin").length;
+      const avatarCount = users.filter((u) => !!u.profilkep).length;
+
+      res.json({
+        stats: {
+          totalUsers,
+          adminCount,
+          normalUserCount,
+          avatarCount,
+        },
+        users,
+      });
+    }
+  );
+});
+
+/* ===== ADMIN ROLE UPDATE ===== */
+app.put(
+  "/api/admin/users/:id/role",
+  authMiddleware,
+  adminMiddleware,
+  (req, res) => {
+    const targetId = Number(req.params.id);
+    const { szerepkor } = req.body;
+
+    if (!targetId || Number.isNaN(targetId)) {
+      return res.status(400).json({ error: "Érvénytelen user azonosító!" });
+    }
+
+    if (!["admin", "user"].includes(szerepkor)) {
+      return res.status(400).json({ error: "Érvénytelen szerepkör!" });
+    }
+
+    if (req.user.id === targetId && szerepkor !== "admin") {
+      return res
+        .status(400)
+        .json({ error: "Saját magadat nem rakhatod vissza userre." });
+    }
+
+    db.query(
+      "SELECT id, nev, email, szerepkor, profilkep FROM felhasznalok WHERE id = ? LIMIT 1",
+      [targetId],
+      (findErr, results) => {
+        if (findErr) {
+          return res.status(500).json({ error: "DB hiba" });
+        }
+
+        if (!results.length) {
+          return res.status(404).json({ error: "Felhasználó nem található!" });
+        }
+
+        db.query(
+          "UPDATE felhasznalok SET szerepkor = ? WHERE id = ?",
+          [szerepkor, targetId],
+          (updateErr) => {
+            if (updateErr) {
+              return res.status(500).json({ error: "Nem sikerült frissíteni a szerepkört!" });
+            }
+
+            res.json({
+              message: "Szerepkör sikeresen frissítve!",
+              user: {
+                ...results[0],
+                szerepkor,
+              },
+            });
+          }
+        );
+      }
+    );
+  }
+);
 
 /* =====================================
    ERROR HANDLER
