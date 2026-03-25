@@ -1,153 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import "./Home.css";
-
-const featuredTours = [
-  {
-    badge: "TÉL / PROFI",
-    img: "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?w=1600",
-    title: "Téli Mátra Gerinctúra",
-    desc: "Havas gerincek Kékes és Galyatető között. Hidegmenedzsment és tájékozódás.",
-    dur: "2 Nap / 1 Éj",
-    price: "85 000 Ft",
-    place: "Mátra",
-  },
-  {
-    badge: "VÍZ / KEZDŐ",
-    img: "https://images.unsplash.com/photo-1544550581-5f7ceaf7f992?w=1600",
-    title: "Gemenci Vízivilág",
-    desc: "Kenuzás Európa egyik legnagyobb ártéri erdejében. Tábor a víz közelében.",
-    dur: "3 Nap / 2 Éj",
-    price: "125 000 Ft",
-    place: "Gemenc",
-  },
-  {
-    badge: "ERDŐ / HALADÓ",
-    img: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1600",
-    title: "Bükki Őserdő",
-    desc: "Rejtett ösvények a Bükk-fennsíkon, barlangszakaszok, tábor tűzzel.",
-    dur: "2 Nap / 1 Éj",
-    price: "79 000 Ft",
-    place: "Bükk",
-  },
-  {
-    badge: "ALPOK / PROFI",
-    img: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1600",
-    title: "Alpesi Hajnal Expedíció",
-    desc: "Korai indulás, szintemelkedés, napfelkelte a csúcson. Tempós, technikás.",
-    dur: "1 Nap",
-    price: "69 000 Ft",
-    place: "Alpok",
-  },
-  {
-    badge: "SZIKLA / HALADÓ",
-    img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1600",
-    title: "Kőszálak & Gerincek",
-    desc: "Gerinctúra kitettebb részekkel, stabil tempó, biztos lépéstechnika.",
-    dur: "2 Nap / 1 Éj",
-    price: "92 000 Ft",
-    place: "Gerinc",
-  },
-  {
-    badge: "TÓ / KEZDŐ",
-    img: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1600",
-    title: "Tavi Tábor & Túra",
-    desc: "Kényelmes túra, tanulható táborozás, esti tűz és chill. Ideális első tábor.",
-    dur: "2 Nap / 1 Éj",
-    price: "59 000 Ft",
-    place: "Tópart",
-  },
-];
-
-const whyCards = [
-  {
-    title: "Letisztultság",
-    front: "Egy útvonal, egy terv, tiszta keretek.",
-    back: "Minden túra egy logikára épül: útvonal, tempó, pihenők. Nincs felesleges körítés.",
-    review: {
-      name: "Bence",
-      rating: 5,
-      avatar: "https://i.pravatar.cc/80?img=11",
-      text: "Végre egy csapat, ahol nincs káosz. Minden percre pontos.",
-    },
-  },
-  {
-    title: "Szakmai vezetés",
-    front: "Döntések terepre, nem elméletre.",
-    back: "Útvonalterv, időjárás, kockázatkezelés — minden a terepen működjön.",
-    review: {
-      name: "Ádám",
-      rating: 5,
-      avatar: "https://i.pravatar.cc/80?img=12",
-      text: "Vihar előtt profi döntések. Végig biztonságban voltunk.",
-    },
-  },
-  {
-    title: "Kis csoport",
-    front: "Figyelem, ritmus, csapatélmény.",
-    back: "Kis létszám mellett jobb tempó és jobb élmény. Nem szakad szét a brigád.",
-    review: {
-      name: "Zsófi",
-      rating: 4,
-      avatar: "https://i.pravatar.cc/80?img=5",
-      text: "Mindenkire jutott figyelem, nem futószalag túra.",
-    },
-  },
-  {
-    title: "Minőség & felszerelés",
-    front: "Nem sufni megoldások.",
-    back: "Ajánlott lista, indulás előtti check, és ha kell: bérelhető profi cuccok.",
-    review: {
-      name: "Nóri",
-      rating: 5,
-      avatar: "https://i.pravatar.cc/80?img=44",
-      text: "A cucc tényleg prémium, és segítettek a rétegezésben.",
-    },
-  },
-  {
-    title: "Biztonság",
-    front: "Nem hősködünk.",
-    back: "Kockázatelemzés, visszafordulási pontok, tartalékterv — nem a szerencsére építünk.",
-    review: {
-      name: "Gábor",
-      rating: 5,
-      avatar: "https://i.pravatar.cc/80?img=22",
-      text: "Végig érezni lehetett, hogy biztonság az első.",
-    },
-  },
-  {
-    title: "Valódi élmény",
-    front: "Nem Insta-túra.",
-    back: "Tempó, csend, jelenlét. Nem pózolni megyünk, hanem átélni.",
-    review: {
-      name: "Eszter",
-      rating: 5,
-      avatar: "https://i.pravatar.cc/80?img=31",
-      text: "Nem fotózás, hanem igazi élmény volt. Pont ezt kerestem.",
-    },
-  },
-];
-
-const natureColsData = [
-  {
-    img: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=2000",
-    kicker: "• mentális reset •",
-    title: "Kevesebb inger. Tisztább fej. Stabilabb tempó.",
-    text: "A természet visszahoz fókuszba: ritmust ad, letisztítja a zajt, és rendbe rakja a döntéseket. Nem pihenés — inkább újrakalibrálás.",
-  },
-  {
-    img: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=2000",
-    kicker: "• fókusz •",
-    title: "Letisztul a zaj. Visszajön a döntés.",
-    text: "Kint kevesebb a mesterséges inger. Egyszerűbb gondolatmenet, stabilabb tempó — ettől te is stabilabb leszel.",
-  },
-  {
-    img: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=2000",
-    kicker: "• ritmus •",
-    title: "Rendszert ad. Nem csak pihensz.",
-    text: "A jó túra összerak: ritmust ad, rendezi a fejet, és visszahoz egy normális belső tempót.",
-  },
-];
 
 const SectionHead = ({ title, subtitle }) => (
   <div className="section-head reveal">
@@ -162,119 +15,170 @@ const SectionHead = ({ title, subtitle }) => (
   </div>
 );
 
-export default function Home() {
-  const [gIndex, setGIndex] = useState(0);
-  const galleryRailRef = useRef(null);
-  const spotifyRef = useRef(null);
-  const [spotifyIn, setSpotifyIn] = useState(false);
-
+const Home = () => {
   useEffect(() => {
     const els = document.querySelectorAll(".reveal");
     const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) e.target.classList.add("active");
-        });
-      },
+      (entries) => entries.forEach((e) => e.isIntersecting && e.target.classList.add("active")),
       { threshold: 0.12 }
     );
-
     els.forEach((el) => io.observe(el));
     return () => io.disconnect();
   }, []);
 
-  const natureCols = useMemo(() => natureColsData, []);
+  const featuredTours = [
+    {
+      badge: "TÉL / PROFI",
+      img: "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?w=1600",
+      title: "Téli Mátra Gerinctúra",
+      desc: "Havas gerincek Kékes és Galyatető között. Hidegmenedzsment és tájékozódás.",
+      dur: "2 Nap / 1 Éj",
+      price: "85 000 Ft",
+      place: "Mátra",
+    },
+    {
+      badge: "VÍZ / KEZDŐ",
+      img: "https://images.unsplash.com/photo-1544550581-5f7ceaf7f992?w=1600",
+      title: "Gemenci Vízivilág",
+      desc: "Kenuzás Európa egyik legnagyobb ártéri erdejében. Tábor a víz közelében.",
+      dur: "3 Nap / 2 Éj",
+      price: "125 000 Ft",
+      place: "Gemenc",
+    },
+    {
+      badge: "ERDŐ / HALADÓ",
+      img: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1600",
+      title: "Bükki Őserdő",
+      desc: "Rejtett ösvények a Bükk-fennsíkon, barlangszakaszok, tábor tűzzel.",
+      dur: "2 Nap / 1 Éj",
+      price: "79 000 Ft",
+      place: "Bükk",
+    },
+    {
+      badge: "ALPOK / PROFI",
+      img: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1600",
+      title: "Alpesi Hajnal Expedíció",
+      desc: "Korai indulás, szintemelkedés, napfelkelte a csúcson. Tempós, technikás.",
+      dur: "1 Nap",
+      price: "69 000 Ft",
+      place: "Alpok",
+    },
+    {
+      badge: "SZIKLA / HALADÓ",
+      img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1600",
+      title: "Kőszálak & Gerincek",
+      desc: "Gerinctúra kitettebb részekkel, stabil tempó, biztos lépéstechnika.",
+      dur: "2 Nap / 1 Éj",
+      price: "92 000 Ft",
+      place: "Gerinc",
+    },
+    {
+      badge: "TÓ / KEZDŐ",
+      img: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1600",
+      title: "Tavi Tábor & Túra",
+      desc: "Kényelmes túra, tanulható táborozás, esti tűz és chill. Ideális első tábor.",
+      dur: "2 Nap / 1 Éj",
+      price: "59 000 Ft",
+      place: "Tópart",
+    },
+  ];
 
-  const gallery = useMemo(() => {
-    const last3 = featuredTours.slice(-3).map((t) => ({
-      title: t.title,
-      place: t.place,
-      img: t.img,
-    }));
+  const whyCards = [
+    {
+      title: "Letisztultság",
+      front: "Egy útvonal, egy terv, tiszta keretek.",
+      back: "Minden túra egy logikára épül: útvonal, tempó, pihenők. Nincs felesleges körítés.",
+      review: {
+        name: "Bence",
+        rating: 5,
+        avatar: "https://i.pravatar.cc/80?img=11",
+        text: "Végre egy csapat, ahol nincs káosz. Minden percre pontos.",
+      },
+    },
+    {
+      title: "Szakmai vezetés",
+      front: "Döntések terepre, nem elméletre.",
+      back: "Útvonalterv, időjárás, kockázatkezelés — minden a terepen működjön.",
+      review: {
+        name: "Ádám",
+        rating: 5,
+        avatar: "https://i.pravatar.cc/80?img=12",
+        text: "Vihar előtt profi döntések. Végig biztonságban voltunk.",
+      },
+    },
+    {
+      title: "Kis csoport",
+      front: "Figyelem, ritmus, csapatélmény.",
+      back: "Kis létszám mellett jobb tempó és jobb élmény. Nem szakad szét a brigád.",
+      review: {
+        name: "Zsófi",
+        rating: 4,
+        avatar: "https://i.pravatar.cc/80?img=5",
+        text: "Mindenkire jutott figyelem, nem futószalag túra.",
+      },
+    },
+    {
+      title: "Minőség & felszerelés",
+      front: "Nem sufni megoldások.",
+      back: "Ajánlott lista, indulás előtti check, és ha kell: bérelhető profi cuccok.",
+      review: {
+        name: "Nóri",
+        rating: 5,
+        avatar: "https://i.pravatar.cc/80?img=44",
+        text: "A cucc tényleg prémium, és segítettek a rétegezésben.",
+      },
+    },
+    {
+      title: "Biztonság",
+      front: "Nem hősködünk.",
+      back: "Kockázatelemzés, visszafordulási pontok, tartalékterv — nem a szerencsére építünk.",
+      review: {
+        name: "Gábor",
+        rating: 5,
+        avatar: "https://i.pravatar.cc/80?img=22",
+        text: "Végig érezni lehetett, hogy biztonság az első.",
+      },
+    },
+    {
+      title: "Valódi élmény",
+      front: "Nem Insta-túra.",
+      back: "Tempó, csend, jelenlét. Nem pózolni megyünk, hanem átélni.",
+      review: {
+        name: "Eszter",
+        rating: 5,
+        avatar: "https://i.pravatar.cc/80?img=31",
+        text: "Nem fotózás, hanem igazi élmény volt. Pont ezt kerestem.",
+      },
+    },
+  ];
 
-    const extra = [
+  const natureCols = useMemo(
+    () => [
       {
-        title: "Ködös reggel",
-        place: "Erdő",
+        img: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=2000",
+        kicker: "• mentális reset •",
+        title: "Kevesebb inger. Tisztább fej. Stabilabb tempó.",
+        text: "A természet visszahoz fókuszba: ritmust ad, letisztítja a zajt, és rendbe rakja a döntéseket. Nem “pihenés” — inkább újrakalibrálás.",
+      },
+      {
         img: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=2000",
+        kicker: "• fókusz •",
+        title: "Letisztul a zaj. Visszajön a döntés.",
+        text: "Kint kevesebb a mesterséges inger. Egyszerűbb gondolatmenet, stabilabb tempó — ettől te is stabilabb leszel.",
       },
       {
-        title: "Éjszakai ég",
-        place: "Csend",
-        img: "https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?w=2000",
+        img: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=2000",
+        kicker: "• ritmus •",
+        title: "Rendszert ad. Nem csak “pihensz”.",
+        text: "A jó túra összerak: ritmust ad, rendezi a fejet, és visszahoz egy normális belső tempót.",
       },
-      {
-        title: "Hegyi tó",
-        place: "Táj",
-        img: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=2000",
-      },
-      {
-        title: "Gerinc",
-        place: "Hegyek",
-        img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=2000",
-      },
-    ];
-
-    return [...last3, ...extra];
-  }, []);
-
-  const prev = () => {
-    setGIndex((i) => (i - 1 + gallery.length) % gallery.length);
-  };
-
-  const next = () => {
-    setGIndex((i) => (i + 1) % gallery.length);
-  };
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === "ArrowLeft") {
-        setGIndex((i) => (i - 1 + gallery.length) % gallery.length);
-      }
-      if (e.key === "ArrowRight") {
-        setGIndex((i) => (i + 1) % gallery.length);
-      }
-    };
-
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [gallery.length]);
-
-  useEffect(() => {
-    const rail = galleryRailRef.current;
-    if (!rail) return;
-
-    const activeThumb = rail.querySelector(".gallery-thumb.active");
-    if (!activeThumb) return;
-
-    activeThumb.scrollIntoView({
-      behavior: "smooth",
-      inline: "center",
-      block: "nearest",
-    });
-  }, [gIndex]);
-
-  useEffect(() => {
-    const el = spotifyRef.current;
-    if (!el) return;
-
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) setSpotifyIn(true);
-        });
-      },
-      { threshold: 0.22 }
-    );
-
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
+    ],
+    []
+  );
 
   const renderStars = (rating) => {
     const full = "★★★★★".slice(0, rating);
     const empty = "★★★★★".slice(rating);
-
     return (
       <span className="stars" aria-label={`${rating} csillag`}>
         {full}
@@ -283,10 +187,79 @@ export default function Home() {
     );
   };
 
+  const gallery = useMemo(() => {
+    const last3 = featuredTours.slice(-3).map((t) => ({
+      title: t.title,
+      place: t.place,
+      img: t.img,
+      badge: t.badge,
+    }));
+    const extra = [
+      {
+        title: "Ködös reggel",
+        place: "Erdő",
+        badge: "HANGULAT",
+        img: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=2000",
+      },
+      {
+        title: "Éjszakai ég",
+        place: "Csend",
+        badge: "ÉJSZAKA",
+        img: "https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?w=2000",
+      },
+      {
+        title: "Hegyi tó",
+        place: "Táj",
+        badge: "PANORÁMA",
+        img: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=2000",
+      },
+      {
+        title: "Gerinc",
+        place: "Hegyek",
+        badge: "ALPOK",
+        img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=2000",
+      },
+    ];
+    return [...last3, ...extra];
+  }, [featuredTours]);
+
+  const [gIndex, setGIndex] = useState(0);
+  const prev = () => setGIndex((i) => (i - 1 + gallery.length) % gallery.length);
+  const next = () => setGIndex((i) => (i + 1) % gallery.length);
+
+  // Galéria billentyűzetes navigáció – nyilakkal lapozás, oldalgörgetés megakadályozása
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        prev();
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        next();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [gallery.length]);
+
   const scrollTo = (id) => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  const spotifyRef = useRef(null);
+  const [spotifyIn, setSpotifyIn] = useState(false);
+  useEffect(() => {
+    const el = spotifyRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((e) => e.isIntersecting && setSpotifyIn(true)),
+      { threshold: 0.22 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   return (
     <div className="home-page">
@@ -305,7 +278,11 @@ export default function Home() {
             <Link to="/berles" className="btn btn-ghost">
               Felszerelés
             </Link>
-            <button className="btn btn-ghost" type="button" onClick={() => scrollTo("nature")}>
+            <button
+              className="btn btn-ghost"
+              type="button"
+              onClick={() => scrollTo("nature")}
+            >
               Miért jó kint?
             </button>
           </div>
@@ -337,15 +314,6 @@ export default function Home() {
                   <div className="tour-meta">
                     <span>{t.dur}</span>
                     <span>{t.price}</span>
-                  </div>
-
-                  <div className="tour-actions">
-                    <Link to="/turak" className="btn btn-ghost btn-sm">
-                      Részletek
-                    </Link>
-                    <Link to="/foglalas" className="btn btn-sm">
-                      Foglalom
-                    </Link>
                   </div>
                 </div>
               </article>
@@ -383,7 +351,11 @@ export default function Home() {
                   <div className="card-review">
                     <div className="card-review-head">
                       <div className="review-user">
-                        <img className="review-avatar" src={c.review.avatar} alt={c.review.name} />
+                        <img
+                          className="review-avatar"
+                          src={c.review.avatar}
+                          alt={c.review.name}
+                        />
                         <span className="card-review-name">{c.review.name}</span>
                       </div>
                       {renderStars(c.review.rating)}
@@ -449,11 +421,12 @@ export default function Home() {
               <div className="spotify-kicker">SPOTIFY · PLAYLIST</div>
               <h3>EXPLORE — Outdoor Focus</h3>
               <p>
-                Ez a lista arra van, hogy <strong>ne szétesve</strong> menj végig. Aláfekszik a
-                tempónak, nem viszi el a figyelmet.
+                Ez a lista arra van, hogy <strong>ne szétesve</strong> menj végig.
+                Aláfekszik a tempónak, nem viszi el a figyelmet.
               </p>
               <p className="spotify-mini">
-                Tipp: indulás előtt nyomd be, és hagyd menni. A döntések meg jönnek maguktól.
+                Tipp: indulás előtt nyomd be, és hagyd menni. A döntések meg jönnek
+                maguktól.
               </p>
             </div>
 
@@ -475,60 +448,279 @@ export default function Home() {
 
       <div className="black-sep" />
 
+      {/* GALÉRIA – eredeti elrendezés, de a nyilak középre igazítva a gombokban */}
       <section className="gallery-pro" id="gallery">
         <div className="container">
-          <SectionHead title="Galéria" subtitle="Utolsó képek a túráinkról." />
+          <SectionHead
+            title="Galéria"
+            subtitle="Nagy preview, jobb navigáció, tisztább thumb sor. ← → billentyűvel is megy."
+          />
 
-          <div className="gallery-frame glass reveal">
-            <div className="gallery-stage">
-              <img
-                src={gallery[gIndex].img}
-                alt={`${gallery[gIndex].title} - ${gallery[gIndex].place}`}
-              />
+          <div
+            className="gallery-pro-head reveal"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 16,
+              marginBottom: 14,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                color: "rgba(255,255,255,.72)",
+                fontSize: 13,
+                fontWeight: 700,
+              }}
+            >
+              <span
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,.12)",
+                  background: "rgba(255,255,255,.04)",
+                  backdropFilter: "blur(10px)",
+                }}
+              >
+                {String(gIndex + 1).padStart(2, "0")} / {String(gallery.length).padStart(2, "0")}
+              </span>
 
+              <span
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(46, 204, 113, .24)",
+                  background: "rgba(46, 204, 113, .10)",
+                  color: "rgba(255,255,255,.88)",
+                }}
+              >
+                {gallery[gIndex].badge}
+              </span>
+            </div>
+
+            <div className="gallery-actions" style={{ display: "flex", gap: 10 }}>
               <button
-                className="gallery-arrow left"
+                className="g-nav"
                 type="button"
                 onClick={prev}
-                aria-label="Előző kép"
+                aria-label="Előző"
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,.12)",
+                  background: "rgba(10,14,16,.72)",
+                  color: "#fff",
+                  fontSize: 26,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  lineHeight: 1,
+                }}
               >
                 ‹
               </button>
-
               <button
-                className="gallery-arrow right"
+                className="g-nav"
                 type="button"
                 onClick={next}
-                aria-label="Következő kép"
+                aria-label="Következő"
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 999,
+                  border: "1px solid rgba(255,255,255,.12)",
+                  background: "rgba(10,14,16,.72)",
+                  color: "#fff",
+                  fontSize: 26,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  lineHeight: 1,
+                }}
               >
                 ›
               </button>
+            </div>
+          </div>
 
-              <div className="gallery-stage-overlay">
-                <div className="gallery-stage-copy">
-                  <span className="gallery-chip">{gallery[gIndex].place}</span>
-                  <h3>{gallery[gIndex].title}</h3>
-                  <p>
-                    {gIndex + 1} / {gallery.length}
-                  </p>
+          <div
+            className="gallery-stage glass reveal"
+            style={{
+              position: "relative",
+              overflow: "hidden",
+              borderRadius: 28,
+              minHeight: 520,
+              border: "1px solid rgba(255,255,255,.10)",
+              boxShadow: "0 24px 80px rgba(0,0,0,.35)",
+            }}
+          >
+            <img
+              src={gallery[gIndex].img}
+              alt={`${gallery[gIndex].title} - ${gallery[gIndex].place}`}
+              style={{
+                width: "100%",
+                height: "100%",
+                minHeight: 520,
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background:
+                  "linear-gradient(180deg, rgba(0,0,0,.10) 0%, rgba(0,0,0,.18) 35%, rgba(0,0,0,.72) 100%)",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div
+              className="gallery-stage-meta"
+              style={{
+                position: "absolute",
+                left: 24,
+                right: 24,
+                bottom: 22,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-end",
+                gap: 20,
+                zIndex: 2,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: ".14em",
+                    textTransform: "uppercase",
+                    color: "rgba(255,255,255,.62)",
+                    marginBottom: 8,
+                  }}
+                >
+                  Explore Gallery
                 </div>
+                <strong
+                  style={{
+                    display: "block",
+                    fontSize: 30,
+                    lineHeight: 1.05,
+                    color: "#fff",
+                    marginBottom: 8,
+                  }}
+                >
+                  {gallery[gIndex].title}
+                </strong>
+                <small
+                  style={{
+                    display: "block",
+                    fontSize: 14,
+                    color: "rgba(255,255,255,.78)",
+                  }}
+                >
+                  {gallery[gIndex].place}
+                </small>
+              </div>
+
+              <div
+                style={{
+                  maxWidth: 280,
+                  padding: "14px 16px",
+                  borderRadius: 18,
+                  background: "rgba(8,12,14,.42)",
+                  border: "1px solid rgba(255,255,255,.10)",
+                  backdropFilter: "blur(12px)",
+                  color: "rgba(255,255,255,.82)",
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                Válogatott pillanatok az utolsó túrákból és hangulatképek a terepről.
               </div>
             </div>
+          </div>
 
-            <div className="gallery-rail" ref={galleryRailRef} role="list">
-              {gallery.map((g, i) => (
-                <button
-                  key={`${g.title}-${i}`}
-                  type="button"
-                  className={`gallery-thumb ${i === gIndex ? "active" : ""}`}
-                  onClick={() => setGIndex(i)}
-                  aria-label={`${g.title} – ${g.place}`}
+          <div
+            className="gallery-thumbs reveal"
+            role="list"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
+              gap: 12,
+              marginTop: 18,
+            }}
+          >
+            {gallery.map((g, i) => (
+              <button
+                key={`${g.title}-${i}`}
+                type="button"
+                className={`g-thumb ${i === gIndex ? "active" : ""}`}
+                onClick={() => setGIndex(i)}
+                aria-label={`${g.title} – ${g.place}`}
+                style={{
+                  position: "relative",
+                  overflow: "hidden",
+                  borderRadius: 18,
+                  border:
+                    i === gIndex
+                      ? "2px solid rgba(46, 204, 113, .95)"
+                      : "1px solid rgba(255,255,255,.08)",
+                  padding: 0,
+                  background: "rgba(255,255,255,.03)",
+                  cursor: "pointer",
+                  boxShadow:
+                    i === gIndex
+                      ? "0 0 0 3px rgba(46, 204, 113, .10)"
+                      : "none",
+                  transform: i === gIndex ? "translateY(-2px)" : "none",
+                  transition: "all .18s ease",
+                }}
+              >
+                <img
+                  src={g.img}
+                  alt={g.title}
+                  loading="lazy"
+                  style={{
+                    width: "100%",
+                    aspectRatio: "1 / 1",
+                    objectFit: "cover",
+                    display: "block",
+                    opacity: i === gIndex ? 1 : 0.78,
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: "auto 0 0 0",
+                    padding: "8px 10px",
+                    background: "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.84) 100%)",
+                    textAlign: "left",
+                  }}
                 >
-                  <img src={g.img} alt={g.title} loading="lazy" />
-                  <span className="gallery-thumb-fade" />
-                </button>
-              ))}
-            </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: "rgba(255,255,255,.94)",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {g.title}
+                  </div>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
       </section>
@@ -563,7 +755,10 @@ export default function Home() {
                 </label>
                 <label>
                   Üzenet
-                  <textarea rows="5" placeholder="Mikor, hány fő, milyen szint, mi érdekel?" />
+                  <textarea
+                    rows="5"
+                    placeholder="Mikor, hány fő, milyen szint, mi érdekel?"
+                  />
                 </label>
 
                 <div className="contact-actions">
@@ -660,4 +855,6 @@ export default function Home() {
       </footer>
     </div>
   );
-}
+};
+
+export default Home;

@@ -1,4 +1,10 @@
-import React, { useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   Routes,
   Route,
@@ -19,7 +25,10 @@ import Berles from "./pages/Berles.jsx";
 import Foglalas from "./pages/Foglalas.jsx";
 import Uzemeltetok from "./pages/Uzemeltetok.jsx";
 import Galeria from "./pages/Galeria.jsx";
+import Profil from "./pages/Profil.jsx";
+import JelszoCsere from "./pages/JelszoCsere.jsx";
 import HelyszinekTerkep from "./pages/HelyszinekTerkep.jsx";
+import Admin from "./pages/Admin.jsx";
 
 // Legal
 import Aszf from "./pages/Aszf.jsx";
@@ -35,6 +44,58 @@ function RequireAuth({ authed, onNeedAuth, children }) {
   }
 
   return children;
+}
+
+function RequireAdmin({ authed, user, onNeedAuth, children }) {
+  const location = useLocation();
+
+  if (!authed) {
+    onNeedAuth?.(location.pathname);
+    return <Navigate to="/" replace />;
+  }
+
+  if (user?.szerepkor !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
+function ScrollHandler() {
+  const { pathname, hash } = useLocation();
+
+  useEffect(() => {
+    if ("scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    if (hash) return;
+
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    window.scrollTo(0, 0);
+
+    const raf1 = requestAnimationFrame(() => {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo(0, 0);
+    });
+
+    const raf2 = requestAnimationFrame(() => {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo(0, 0);
+    });
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [pathname, hash]);
+
+  return null;
 }
 
 export default function App() {
@@ -61,8 +122,13 @@ export default function App() {
       const target = afterLoginPath;
       setAfterLoginPath("");
       navigate(target, { replace: true });
+      return;
     }
-  }, [authed, authOpen, afterLoginPath, navigate]);
+
+    if (user?.szerepkor === "admin") {
+      navigate("/admin", { replace: true });
+    }
+  }, [authed, authOpen, afterLoginPath, navigate, user]);
 
   const handleNeedAuth = (path) => {
     if (!authOpen) openAuth(path);
@@ -70,17 +136,46 @@ export default function App() {
 
   return (
     <>
+      <ScrollHandler />
+
       <Navbar onOpenAuth={() => openAuth("")} />
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
 
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/turak" element={<Turak onOpenAuth={openAuth} />} />
+        <Route path="/turak" element={<Turak />} />
         <Route path="/berles" element={<Berles />} />
         <Route path="/uzemeltetok" element={<Uzemeltetok />} />
         <Route path="/galeria" element={<Galeria />} />
         <Route path="/helyszinek-terkep" element={<HelyszinekTerkep />} />
+
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin authed={authed} user={user} onNeedAuth={handleNeedAuth}>
+              <Admin />
+            </RequireAdmin>
+          }
+        />
+
+        <Route
+          path="/profil"
+          element={
+            <RequireAuth authed={authed} onNeedAuth={handleNeedAuth}>
+              <Profil />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/jelszocsere"
+          element={
+            <RequireAuth authed={authed} onNeedAuth={handleNeedAuth}>
+              <JelszoCsere />
+            </RequireAuth>
+          }
+        />
 
         <Route
           path="/foglalas"

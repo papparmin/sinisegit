@@ -4,5 +4,10 @@
   "description": "Docker indító script",
   "scripts": {
     "start": "node indito.js"
+  },
+  "dependencies": {
+    "axios": "^1.13.6",
+    "cloudinary": "^2.9.0",
+    "multer": "^2.1.1"
   }
 }

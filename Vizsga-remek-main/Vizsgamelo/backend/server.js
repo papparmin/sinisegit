@@ -8,11 +8,13 @@ const path = require("path");
 const fs = require("fs");
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 /* =====================================
-   UPLOADS FOLDER (auto create)
+   UPLOADS FOLDER
 ===================================== */
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 
@@ -49,19 +51,56 @@ db.getConnection((err, connection) => {
 const JWT_SECRET = process.env.JWT_SECRET || "vizsga_secret";
 
 /* =====================================
-   MULTER (image upload)
+   AUTH MIDDLEWARE
+===================================== */
+function authMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization || "";
+  const token = authHeader.startsWith("Bearer ")
+    ? authHeader.split(" ")[1]
+    : null;
+
+  if (!token) {
+    return res.status(401).json({ error: "Nincs token!" });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: "Érvénytelen token!" });
+  }
+}
+
+/* =====================================
+   HELPER
+===================================== */
+function deleteLocalImage(relativePath) {
+  if (!relativePath) return;
+  if (!relativePath.startsWith("/uploads/")) return;
+
+  const safePath = relativePath.replace(/^\//, "");
+  const filePath = path.join(__dirname, safePath);
+
+  if (fs.existsSync(filePath)) {
+    fs.unlink(filePath, () => {});
+  }
+}
+
+/* =====================================
+   MULTER
 ===================================== */
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
-    cb(null, Date.now() + "_" + Math.random().toString(16).slice(2) + ext);
+    cb(null, `${Date.now()}_${Math.random().toString(16).slice(2)}${ext}`);
   },
 });
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
       return cb(new Error("Csak képfájl tölthető fel!"));
@@ -92,24 +131,31 @@ app.post("/api/register", async (req, res) => {
     "SELECT id FROM felhasznalok WHERE email = ?",
     [email],
     async (err, results) => {
-      if (err) return res.status(500).json({ error: "DB hiba" });
+      if (err) {
+        return res.status(500).json({ error: "DB hiba" });
+      }
 
       if (results.length > 0) {
         return res.status(400).json({ error: "Email már létezik!" });
       }
 
-      const hashedPassword = await bcrypt.hash(password, 10);
+      try {
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-      db.query(
-        "INSERT INTO felhasznalok (nev, email, jelszo, profilkep) VALUES (?, ?, ?, NULL)",
-        [fullName, email, hashedPassword],
-        (insertErr) => {
-          if (insertErr)
-            return res.status(500).json({ error: "Mentési hiba" });
+        db.query(
+          "INSERT INTO felhasznalok (nev, email, jelszo, profilkep) VALUES (?, ?, ?, NULL)",
+          [fullName, email, hashedPassword],
+          (insertErr) => {
+            if (insertErr) {
+              return res.status(500).json({ error: "Mentési hiba" });
+            }
 
-          res.status(201).json({ message: "Sikeres regisztráció!" });
-        }
-      );
+            res.status(201).json({ message: "Sikeres regisztráció!" });
+          }
+        );
+      } catch (hashErr) {
+        return res.status(500).json({ error: "Jelszó titkosítási hiba" });
+      }
     }
   );
 });
@@ -122,57 +168,166 @@ app.post("/api/login", (req, res) => {
     "SELECT * FROM felhasznalok WHERE email = ?",
     [email],
     async (err, results) => {
-      if (err) return res.status(500).json({ error: "DB hiba" });
+      if (err) {
+        return res.status(500).json({ error: "DB hiba" });
+      }
 
-      if (results.length === 0)
+      if (results.length === 0) {
         return res.status(401).json({ error: "Hibás adatok!" });
+      }
 
       const user = results[0];
-      const isMatch = await bcrypt.compare(password, user.jelszo);
 
-      if (!isMatch)
-        return res.status(401).json({ error: "Hibás adatok!" });
+      try {
+        const isMatch = await bcrypt.compare(password, user.jelszo);
 
-      const token = jwt.sign(
-        { id: user.id },
-        JWT_SECRET,
-        { expiresIn: "1d" }
-      );
+        if (!isMatch) {
+          return res.status(401).json({ error: "Hibás adatok!" });
+        }
 
-      res.json({
-        message: "Sikeres belépés!",
-        token,
-        user: {
-          id: user.id,
-          nev: user.nev,
-          email: user.email,
-          szerepkor: user.szerepkor,
-          profilkep: user.profilkep,
-        },
-      });
+        const token = jwt.sign({ id: user.id }, JWT_SECRET, {
+          expiresIn: "1d",
+        });
+
+        res.json({
+          message: "Sikeres belépés!",
+          token,
+          user: {
+            id: user.id,
+            nev: user.nev,
+            email: user.email,
+            szerepkor: user.szerepkor,
+            profilkep: user.profilkep,
+          },
+        });
+      } catch (compareErr) {
+        return res.status(500).json({ error: "Belépési hiba" });
+      }
+    }
+  );
+});
+
+/* ===== PROFILE GET ===== */
+app.get("/api/profile", authMiddleware, (req, res) => {
+  db.query(
+    "SELECT id, nev, email, szerepkor, profilkep FROM felhasznalok WHERE id = ?",
+    [req.user.id],
+    (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: "DB hiba" });
+      }
+
+      if (results.length === 0) {
+        return res.status(404).json({ error: "Felhasználó nem található!" });
+      }
+
+      res.json(results[0]);
     }
   );
 });
 
 /* ===== PROFILE IMAGE UPLOAD ===== */
-app.post("/api/profile/avatar", upload.single("avatar"), (req, res) => {
-  const { userId } = req.body;
+app.post(
+  "/api/profile/avatar",
+  authMiddleware,
+  upload.single("avatar"),
+  (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "Nincs kiválasztott kép!" });
+    }
 
-  if (!userId) return res.status(400).json({ error: "Hiányzó userId" });
-  if (!req.file) return res.status(400).json({ error: "Nincs fájl" });
+    const imagePath = `/uploads/${req.file.filename}`;
 
-  const imagePath = `/uploads/${req.file.filename}`;
+    db.query(
+      "SELECT profilkep FROM felhasznalok WHERE id = ?",
+      [req.user.id],
+      (selectErr, results) => {
+        if (selectErr) {
+          return res.status(500).json({ error: "DB hiba" });
+        }
+
+        const oldImage = results?.[0]?.profilkep || null;
+
+        db.query(
+          "UPDATE felhasznalok SET profilkep = ? WHERE id = ?",
+          [imagePath, req.user.id],
+          (updateErr) => {
+            if (updateErr) {
+              return res.status(500).json({ error: "DB hiba" });
+            }
+
+            if (oldImage && oldImage !== imagePath) {
+              deleteLocalImage(oldImage);
+            }
+
+            res.json({
+              message: "Profilkép frissítve!",
+              profilkep: imagePath,
+            });
+          }
+        );
+      }
+    );
+  }
+);
+
+/* ===== PASSWORD CHANGE ===== */
+app.put("/api/profile/password", authMiddleware, async (req, res) => {
+  const { currentPassword, newPassword, confirmPassword } = req.body;
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return res.status(400).json({ error: "Minden mezőt tölts ki!" });
+  }
+
+  if (newPassword.length < 6) {
+    return res
+      .status(400)
+      .json({ error: "Az új jelszó legyen legalább 6 karakter!" });
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ error: "Az új jelszavak nem egyeznek!" });
+  }
 
   db.query(
-    "UPDATE felhasznalok SET profilkep = ? WHERE id = ?",
-    [imagePath, userId],
-    (err) => {
-      if (err) return res.status(500).json({ error: "DB hiba" });
+    "SELECT id, jelszo FROM felhasznalok WHERE id = ?",
+    [req.user.id],
+    async (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: "DB hiba" });
+      }
 
-      res.json({
-        message: "Profilkép frissítve!",
-        profilkep: imagePath,
-      });
+      if (!results.length) {
+        return res.status(404).json({ error: "Felhasználó nem található!" });
+      }
+
+      const dbUser = results[0];
+
+      try {
+        const isMatch = await bcrypt.compare(currentPassword, dbUser.jelszo);
+
+        if (!isMatch) {
+          return res.status(400).json({ error: "A jelenlegi jelszó hibás!" });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        db.query(
+          "UPDATE felhasznalok SET jelszo = ? WHERE id = ?",
+          [hashedPassword, req.user.id],
+          (updateErr) => {
+            if (updateErr) {
+              return res
+                .status(500)
+                .json({ error: "Nem sikerült a jelszó módosítása!" });
+            }
+
+            res.json({ message: "Jelszó sikeresen módosítva!" });
+          }
+        );
+      } catch (hashErr) {
+        return res.status(500).json({ error: "Jelszó módosítási hiba" });
+      }
     }
   );
 });

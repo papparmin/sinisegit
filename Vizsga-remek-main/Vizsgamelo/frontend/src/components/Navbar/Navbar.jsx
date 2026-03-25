@@ -5,9 +5,12 @@ import "./Navbar.css";
 import logo from "../../assets/logonk.png";
 import { AuthContext } from "../AuthContext.jsx";
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5050";
+
 export default function Navbar({ onOpenAuth }) {
   const { user, token, logout } = useContext(AuthContext);
   const authed = !!token && !!user;
+  const isAdmin = user?.szerepkor === "admin";
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -15,6 +18,7 @@ export default function Navbar({ onOpenAuth }) {
   const displayName = useMemo(() => {
     if (!user) return "";
     return (
+      user.nev ||
       user.firstName ||
       user.firstname ||
       user.name ||
@@ -23,11 +27,18 @@ export default function Navbar({ onOpenAuth }) {
     );
   }, [user]);
 
+  const avatarSrc = useMemo(() => {
+    if (!user?.profilkep) return "";
+    if (user.profilkep.startsWith("http")) return user.profilkep;
+    return `${API_BASE}${user.profilkep}`;
+  }, [user]);
+
   useEffect(() => {
     const onDocClick = (e) => {
       if (!menuRef.current) return;
       if (!menuRef.current.contains(e.target)) setMenuOpen(false);
     };
+
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, []);
@@ -43,7 +54,8 @@ export default function Navbar({ onOpenAuth }) {
     logout?.();
   };
 
-  const navClass = ({ isActive }) => (isActive ? "nav-link active" : "nav-link");
+  const navClass = ({ isActive }) =>
+    isActive ? "nav-link active" : "nav-link";
 
   return (
     <header className="navbar">
@@ -75,6 +87,11 @@ export default function Navbar({ onOpenAuth }) {
           <NavLink to="/foglalas" className={navClass}>
             Foglalás
           </NavLink>
+          {isAdmin && (
+            <NavLink to="/admin" className={navClass}>
+              Admin
+            </NavLink>
+          )}
         </nav>
 
         <div className="nav-right">
@@ -93,16 +110,31 @@ export default function Navbar({ onOpenAuth }) {
                 title={displayName}
               >
                 <span className="usericon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z"
-                      stroke="currentColor"
-                      strokeWidth="1.7"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                  {avatarSrc ? (
+                    <img
+                      src={avatarSrc}
+                      alt="Profilkép"
+                      style={{
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "50%",
+                        objectFit: "cover",
+                        display: "block",
+                      }}
                     />
-                  </svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-4.418 0-8 2.239-8 5v1h16v-1c0-2.761-3.582-5-8-5Z"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
                 </span>
+
                 <span className="username">{displayName}</span>
                 <span className="chev" aria-hidden="true">
                   ▾
@@ -119,6 +151,17 @@ export default function Navbar({ onOpenAuth }) {
                   </div>
 
                   <div className="usermenu-sep" />
+
+                  {isAdmin && (
+                    <Link
+                      to="/admin"
+                      className="usermenu-item"
+                      role="menuitem"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Admin felület
+                    </Link>
+                  )}
 
                   <Link
                     to="/profil"
