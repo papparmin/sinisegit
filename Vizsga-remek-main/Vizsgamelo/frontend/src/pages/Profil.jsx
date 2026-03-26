@@ -10,26 +10,82 @@ export default function Profil() {
   const { user, token, login } = useContext(AuthContext);
   const navigate = useNavigate();
 
+  const [profile, setProfile] = useState(user || null);
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState("");
+  const [pageLoading, setPageLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ text: "", type: "" });
 
   useEffect(() => {
-    if (!token) {
+    if (token === null) {
       navigate("/");
     }
   }, [token, navigate]);
 
   const currentAvatar = useMemo(() => {
-    if (!user?.profilkep) return "";
-    if (user.profilkep.startsWith("http")) return user.profilkep;
-    return `${API_BASE}${user.profilkep}`;
-  }, [user]);
+    if (!profile?.profilkep) return "";
+    if (profile.profilkep.startsWith("http")) return profile.profilkep;
+    return `${API_BASE}${profile.profilkep}`;
+  }, [profile]);
 
   useEffect(() => {
-    setAvatarPreview(currentAvatar || "");
-  }, [currentAvatar]);
+    let mounted = true;
+
+    const fetchProfile = async () => {
+      if (!token) {
+        setPageLoading(false);
+        return;
+      }
+
+      try {
+        const res = await axios.get(`${API_BASE}/api/profile`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!mounted) return;
+
+        setProfile(res.data || null);
+        login(token, res.data || {});
+      } catch (err) {
+        console.error("PROFILE FETCH ERROR:", err);
+        if (!mounted) return;
+
+        setMessage({
+          text:
+            err.response?.data?.error ||
+            "Nem sikerült betölteni a profiladatokat.",
+          type: "error",
+        });
+      } finally {
+        if (mounted) {
+          setPageLoading(false);
+        }
+      }
+    };
+
+    fetchProfile();
+
+    return () => {
+      mounted = false;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!avatarFile) {
+      setAvatarPreview(currentAvatar || "");
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(avatarFile);
+    setAvatarPreview(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [avatarFile, currentAvatar]);
 
   const handleAvatarChange = (e) => {
     const file = e.target.files?.[0];
@@ -48,12 +104,16 @@ export default function Profil() {
     }
 
     setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
   };
 
   const uploadAvatar = async () => {
     if (!avatarFile) {
       setMessage({ text: "Előbb válassz ki egy képet.", type: "error" });
+      return;
+    }
+
+    if (!token) {
+      setMessage({ text: "Lejárt a bejelentkezés. Lépj be újra.", type: "error" });
       return;
     }
 
@@ -70,13 +130,19 @@ export default function Profil() {
         },
       });
 
-      const updatedUser = {
-        ...(user || {}),
-        profilkep: res.data.profilkep,
+      const refreshedProfileRes = await axios.get(`${API_BASE}/api/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const refreshedProfile = refreshedProfileRes.data || {
+        ...(profile || {}),
+        profilkep: res.data?.profilkep || null,
       };
 
-      login(token, updatedUser);
-      setAvatarPreview(`${API_BASE}${res.data.profilkep}`);
+      setProfile(refreshedProfile);
+      login(token, refreshedProfile);
       setAvatarFile(null);
 
       setMessage({
@@ -97,6 +163,24 @@ export default function Profil() {
       setLoading(false);
     }
   };
+
+  if (pageLoading) {
+    return (
+      <main className="profil-page">
+        <div className="profil-shell">
+          <section className="profil-card">
+            <div className="profil-header">
+              <div>
+                <p className="profil-eyebrow">Fiók</p>
+                <h1>Profilkép</h1>
+                <p className="profil-sub">Profil betöltése...</p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="profil-page">
@@ -121,7 +205,7 @@ export default function Profil() {
               {avatarPreview ? (
                 <img src={avatarPreview} alt="Profilkép" />
               ) : (
-                <span>+</span>
+                <span>{(profile?.nev || user?.nev || "+").trim().charAt(0).toUpperCase()}</span>
               )}
             </div>
 

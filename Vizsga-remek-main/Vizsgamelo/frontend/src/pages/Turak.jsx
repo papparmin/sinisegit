@@ -1,131 +1,66 @@
-import React, { useContext, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useContext, useEffect, useMemo, useState } from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import "./Turak.css";
 import { AuthContext } from "../components/AuthContext.jsx";
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5050";
+const FALLBACK_TOUR_IMAGE =
+  "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1400";
 
 const Turak = ({ onOpenAuth }) => {
   const nav = useNavigate();
   const { user, token } = useContext(AuthContext);
   const authed = !!user && !!token;
 
-  const tours = useMemo(
-    () => [
-      {
-        id: "matra-tel",
-        badge: "TÉL / PROFI",
-        category: "Tél",
-        level: "Profi",
-        img: "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?w=1400",
-        title: "Téli Mátra Gerinctúra",
-        desc: "Havas gerincek Kékes és Galyatető között. Hidegmenedzsment és tájékozódás.",
-        dur: "2 Nap / 1 Éj",
-        price: 85000,
-      },
-      {
-        id: "gemenc",
-        badge: "VÍZ / KEZDŐ",
-        category: "Víz",
-        level: "Kezdő",
-        img: "https://images.unsplash.com/photo-1544550581-5f7ceaf7f992?w=1400",
-        title: "Gemenci Vízivilág",
-        desc: "Kenuzás Európa egyik legnagyobb ártéri erdejében. Tábor a víz közelében.",
-        dur: "3 Nap / 2 Éj",
-        price: 125000,
-      },
-      {
-        id: "bukk-oserd",
-        badge: "ERDŐ / HALADÓ",
-        category: "Erdő",
-        level: "Haladó",
-        img: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1400",
-        title: "Bükki Őserdő",
-        desc: "Rejtett ösvények a Bükk-fennsíkon, barlangszakaszok, tábor tűzzel.",
-        dur: "2 Nap / 1 Éj",
-        price: 79000,
-      },
-      {
-        id: "alp-hajnal",
-        badge: "ALPOK / PROFI",
-        category: "Hegyek",
-        level: "Profi",
-        img: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1400",
-        title: "Alpesi Hajnal Expedíció",
-        desc: "Korai indulás, szintemelkedés, napfelkelte a csúcson. Tempós, technikás.",
-        dur: "1 Nap",
-        price: 69000,
-      },
-      {
-        id: "koszalak",
-        badge: "SZIKLA / HALADÓ",
-        category: "Szikla",
-        level: "Haladó",
-        img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1400",
-        title: "Kőszálak & Gerincek",
-        desc: "Gerinctúra kitettebb részekkel, stabil tempó, biztos lépéstechnika.",
-        dur: "2 Nap / 1 Éj",
-        price: 92000,
-      },
-      {
-        id: "tavi-tabor",
-        badge: "TÓ / KEZDŐ",
-        category: "Tábor",
-        level: "Kezdő",
-        img: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1400",
-        title: "Tavi Tábor & Túra",
-        desc: "Kényelmes túra, tanulható táborozás, esti tűz és chill. Ideális első tábor.",
-        dur: "2 Nap / 1 Éj",
-        price: 59000,
-      },
-      {
-        id: "dunakanyar",
-        badge: "PANORÁMA / KEZDŐ",
-        category: "Panoráma",
-        level: "Kezdő",
-        img: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?w=1400",
-        title: "Dunakanyar Naplemente Túra",
-        desc: "Aranyóra a Duna felett. Laza tempó, nézelődés, fotópontok.",
-        dur: "1 Nap",
-        price: 39000,
-      },
-      {
-        id: "balaton-kilato",
-        badge: "KILÁTÓ / KEZDŐ",
-        category: "Panoráma",
-        level: "Kezdő",
-        img: "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?w=1400",
-        title: "Balaton-felvidék Kilátók",
-        desc: "Könnyed túra kilátókkal, tanúhegyekkel és balatoni panorámával.",
-        dur: "1 Nap",
-        price: 42000,
-      },
-      {
-        id: "matra-esti",
-        badge: "ERDŐ / KEZDŐ",
-        category: "Erdő",
-        level: "Kezdő",
-        img: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=1400",
-        title: "Mátrai Esti Terep",
-        desc: "Rövid tereptúra alkonyatban. Rétegezés, tempó, alap navigáció.",
-        dur: "1 Nap",
-        price: 45000,
-      },
-      {
-        id: "bukk-kod",
-        badge: "KÖD / HALADÓ",
-        category: "Tél",
-        level: "Haladó",
-        img: "https://images.unsplash.com/photo-1482192596544-9eb780fc7f66?w=1400",
-        title: "Ködös Bükk Tájékozódás",
-        desc: "Haladó navigáció: iránytű, útvonal-korrekció, terepolvasás.",
-        dur: "1 Nap",
-        price: 52000,
-      },
-    ],
-    []
-  );
-
+  const [tours, setTours] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorText, setErrorText] = useState("");
   const [query, setQuery] = useState("");
   const [activeCat, setActiveCat] = useState("Összes");
+
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchTours = async () => {
+      setLoading(true);
+      setErrorText("");
+
+      try {
+        const res = await axios.get(`${API_BASE}/api/tours`);
+        if (mounted) {
+          setTours(Array.isArray(res.data) ? res.data : []);
+        }
+      } catch (err) {
+        console.error(err);
+        if (mounted) {
+          setErrorText("Nem sikerült betölteni a túrákat.");
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchTours();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const categories = useMemo(() => {
+    return [
+      "Összes",
+      ...new Set(
+        tours
+          .map((t) => t.category)
+          .filter(Boolean)
+          .map((c) => c.trim())
+      ),
+    ];
+  }, [tours]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -136,36 +71,42 @@ const Turak = ({ onOpenAuth }) => {
       if (!q) return true;
 
       return (
-        t.title.toLowerCase().includes(q) ||
-        t.desc.toLowerCase().includes(q) ||
-        t.badge.toLowerCase().includes(q) ||
-        t.category.toLowerCase().includes(q) ||
-        t.level.toLowerCase().includes(q)
+        (t.title || "").toLowerCase().includes(q) ||
+        (t.desc || "").toLowerCase().includes(q) ||
+        (t.badge || "").toLowerCase().includes(q) ||
+        (t.category || "").toLowerCase().includes(q) ||
+        (t.level || "").toLowerCase().includes(q)
       );
     });
   }, [tours, query, activeCat]);
 
   const handleBookingClick = (tour) => {
+    if (tour?.soldOut) {
+      return;
+    }
+
+    const targetSlug = tour.slug || tour.id;
+
     if (authed) {
-      nav(`/foglalas/${tour.id}`, {
-        state: {
-          tourTitle: tour.title,
-          tourPrice: tour.price,
-          tourDur: tour.dur,
-          tourBadge: tour.badge,
-        },
-      });
+      nav(`/foglalas/${targetSlug}`);
       return;
     }
 
     if (onOpenAuth) {
-      onOpenAuth(`/foglalas/${tour.id}`);
+      onOpenAuth(`/foglalas/${targetSlug}`);
     } else {
       alert("A foglaláshoz bejelentkezés szükséges!");
     }
   };
 
-  const fmtFt = (n) => `${n.toLocaleString("hu-HU")} Ft`;
+  const fmtFt = (n) => `${Number(n || 0).toLocaleString("hu-HU")} Ft`;
+
+  const getTourImage = (img) => {
+    if (!img) return FALLBACK_TOUR_IMAGE;
+    if (img.startsWith("http://") || img.startsWith("https://")) return img;
+    if (img.startsWith("/")) return `${API_BASE}${img}`;
+    return img;
+  };
 
   return (
     <div className="turak-page">
@@ -176,42 +117,174 @@ const Turak = ({ onOpenAuth }) => {
             <p>Válassz a kínálatból. Foglaláshoz bejelentkezés szükséges.</p>
           </div>
 
-          <div className="turak-grid">
-            {filtered.map((t) => (
-              <article className="turak-card glass" key={t.id}>
-                <span className="turak-badge">{t.badge}</span>
+          <div
+            style={{
+              display: "grid",
+              gap: 14,
+              marginBottom: 24,
+            }}
+          >
+            <input
+              type="text"
+              placeholder="Keresés cím, kategória vagy nehézség alapján..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              style={{
+                width: "100%",
+                borderRadius: 14,
+                padding: "14px 16px",
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.06)",
+                color: "#fff",
+                outline: "none",
+              }}
+            />
 
-                <div className="turak-img">
-                  <img src={t.img} alt={t.title} />
-                </div>
-
-                <div className="turak-body">
-                  <h3>{t.title}</h3>
-                  <p className="turak-desc">{t.desc}</p>
-
-                  <div className="turak-meta">
-                    <span>{t.dur}</span>
-                    <span className="turak-price">{fmtFt(t.price)}</span>
-                  </div>
-
-                  <div className="turak-actions">
-                    <Link to={`/turak/${t.id}`} className="btn-mini ghost">
-                      Megnézem
-                    </Link>
-
-                    <button
-                      type="button"
-                      onClick={() => handleBookingClick(t)}
-                      className="btn-mini"
-                      style={{ cursor: "pointer", border: "none" }}
-                    >
-                      Foglalom
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))}
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setActiveCat(cat)}
+                  style={{
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background:
+                      activeCat === cat
+                        ? "rgba(46, 204, 113, 0.22)"
+                        : "rgba(255,255,255,0.06)",
+                    color: "#fff",
+                    borderRadius: 999,
+                    padding: "10px 14px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {loading ? (
+            <div className="turak-empty glass">Túrák betöltése...</div>
+          ) : errorText ? (
+            <div className="turak-empty glass">{errorText}</div>
+          ) : filtered.length === 0 ? (
+            <div className="turak-empty glass">Nincs találat.</div>
+          ) : (
+            <div className="turak-grid">
+              {filtered.map((t) => (
+                <article className="turak-card glass" key={t.id || t.slug}>
+                  <span className="turak-badge">{t.badge || "EXPLORE"}</span>
+
+                  <div className="turak-img">
+                    <img src={getTourImage(t.img)} alt={t.title} />
+                  </div>
+
+                  <div className="turak-body">
+                    <h3>{t.title}</h3>
+                    <p className="turak-desc">{t.shortDesc || t.desc}</p>
+
+                    <div className="turak-meta">
+                      <span>{t.dur}</span>
+                      <span className="turak-price">{fmtFt(t.price)}</span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        marginBottom: 10,
+                        fontSize: 13,
+                        opacity: 0.82,
+                      }}
+                    >
+                      <span>{t.category}</span>
+                      <span>•</span>
+                      <span>{t.level}</span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        marginBottom: 14,
+                        fontSize: 13,
+                      }}
+                    >
+                      <span
+                        style={{
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          background: "rgba(255,255,255,0.06)",
+                          border: "1px solid rgba(255,255,255,0.1)",
+                        }}
+                      >
+                        {t.joinedCount} / {t.maxPeople} fő
+                      </span>
+
+                      {t.soldOut ? (
+                        <span
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            background: "rgba(255, 80, 80, 0.14)",
+                            border: "1px solid rgba(255, 80, 80, 0.24)",
+                          }}
+                        >
+                          Betelt
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            background: "rgba(46, 204, 113, 0.12)",
+                            border: "1px solid rgba(46, 204, 113, 0.24)",
+                          }}
+                        >
+                          {t.remainingPlaces} szabad hely
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="turak-actions">
+                      <button
+                        type="button"
+                        onClick={() => handleBookingClick(t)}
+                        className="btn-mini ghost"
+                        style={{ cursor: t.soldOut ? "not-allowed" : "pointer" }}
+                        disabled={t.soldOut}
+                      >
+                        {t.soldOut ? "Betelt" : "Részletek"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleBookingClick(t)}
+                        className="btn-mini"
+                        style={{
+                          cursor: t.soldOut ? "not-allowed" : "pointer",
+                          border: "none",
+                          opacity: t.soldOut ? 0.6 : 1,
+                        }}
+                        disabled={t.soldOut}
+                      >
+                        {t.soldOut ? "Betelt" : "Foglalom"}
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>

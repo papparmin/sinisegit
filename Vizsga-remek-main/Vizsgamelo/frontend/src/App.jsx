@@ -144,7 +144,7 @@ export default function App() {
 
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/turak" element={<Turak />} />
+        <Route path="/turak" element={<Turak onOpenAuth={handleNeedAuth} />} />
         <Route path="/berles" element={<Berles />} />
         <Route path="/uzemeltetok" element={<Uzemeltetok />} />
         <Route path="/galeria" element={<Galeria />} />

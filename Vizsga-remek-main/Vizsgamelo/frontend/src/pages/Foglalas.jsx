@@ -1,91 +1,19 @@
-import React, { useMemo, useState, useContext, useEffect } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import React, { useEffect, useMemo, useState, useContext } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import "./Foglalas.css";
 import Swal from "sweetalert2";
 import { AuthContext } from "../components/AuthContext.jsx";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5050";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5050";
 
 export default function Foglalas() {
   const { tourId } = useParams();
   const nav = useNavigate();
-  const loc = useLocation();
   const { user, token } = useContext(AuthContext);
 
-  const tourMap = useMemo(
-    () => ({
-      "matra-tel": {
-        title: "Téli Mátra Gerinctúra",
-        badge: "TÉL / PROFI",
-        dur: "2 Nap / 1 Éj",
-        price: 85000,
-      },
-      gemenc: {
-        title: "Gemenci Vízivilág",
-        badge: "VÍZ / KEZDŐ",
-        dur: "3 Nap / 2 Éj",
-        price: 125000,
-      },
-      "bukk-oserd": {
-        title: "Bükki Őserdő",
-        badge: "ERDŐ / HALADÓ",
-        dur: "2 Nap / 1 Éj",
-        price: 79000,
-      },
-      "alp-hajnal": {
-        title: "Alpesi Hajnal Expedíció",
-        badge: "ALPOK / PROFI",
-        dur: "1 Nap",
-        price: 69000,
-      },
-      koszalak: {
-        title: "Kőszálak & Gerincek",
-        badge: "SZIKLA / HALADÓ",
-        dur: "2 Nap / 1 Éj",
-        price: 92000,
-      },
-      "tavi-tabor": {
-        title: "Tavi Tábor & Túra",
-        badge: "TÓ / KEZDŐ",
-        dur: "2 Nap / 1 Éj",
-        price: 59000,
-      },
-      dunakanyar: {
-        title: "Dunakanyar Naplemente Túra",
-        badge: "PANORÁMA / KEZDŐ",
-        dur: "1 Nap",
-        price: 39000,
-      },
-      "balaton-kilato": {
-        title: "Balaton-felvidék Kilátók",
-        badge: "KILÁTÓ / KEZDŐ",
-        dur: "1 Nap",
-        price: 42000,
-      },
-      "matra-esti": {
-        title: "Mátrai Esti Terep",
-        badge: "ERDŐ / KEZDŐ",
-        dur: "1 Nap",
-        price: 45000,
-      },
-      "bukk-kod": {
-        title: "Ködös Bükk Tájékozódás",
-        badge: "KÖD / HALADÓ",
-        dur: "1 Nap",
-        price: 52000,
-      },
-    }),
-    []
-  );
-
-  const routeTour = tourId ? tourMap[tourId] : null;
-  const state = loc.state || {};
-
-  const selectedTitle = state.tourTitle || routeTour?.title || "";
-  const selectedBadge = state.tourBadge || routeTour?.badge || "KIVÁLASZTOTT";
-  const selectedDur = state.tourDur || routeTour?.dur || "—";
-  const selectedPrice =
-    typeof state.tourPrice === "number" ? state.tourPrice : routeTour?.price;
+  const [tour, setTour] = useState(null);
+  const [tourLoading, setTourLoading] = useState(true);
+  const [tourError, setTourError] = useState("");
 
   const [form, setForm] = useState({
     name: "",
@@ -102,27 +30,114 @@ export default function Foglalas() {
     accept: false,
   });
 
+  const [guests, setGuests] = useState([]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchTour = async () => {
+      if (!tourId) {
+        setTourLoading(false);
+        setTourError("Hiányzik a túra azonosító.");
+        return;
+      }
+
+      setTourLoading(true);
+      setTourError("");
+
+      try {
+        const res = await fetch(`${API_BASE}/api/tours/${encodeURIComponent(tourId)}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data?.error || "Nem sikerült betölteni a túrát.");
+        }
+
+        if (mounted) {
+          setTour(data);
+        }
+      } catch (err) {
+        if (mounted) {
+          setTour(null);
+          setTourError(err.message || "Nem sikerült betölteni a túrát.");
+        }
+      } finally {
+        if (mounted) {
+          setTourLoading(false);
+        }
+      }
+    };
+
+    fetchTour();
+
+    return () => {
+      mounted = false;
+    };
+  }, [tourId]);
+
   useEffect(() => {
     if (!user) return;
 
     setForm((prev) => ({
       ...prev,
-      name:
-        prev.name ||
-        `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+      name: prev.name || user.nev || "",
       email: prev.email || user.email || "",
       phone: prev.phone || user.phone || "",
     }));
   }, [user]);
 
+  useEffect(() => {
+    const guestCount = Math.max(0, Number(form.people || 1) - 1);
+
+    setGuests((prev) =>
+      Array.from({ length: guestCount }, (_, i) => prev[i] || {
+        name: "",
+        email: "",
+        phone: "",
+      })
+    );
+  }, [form.people]);
+
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
-  const invalidTour = !tourId || !selectedTitle;
+  const setGuest = (index, key, value) => {
+    setGuests((prev) =>
+      prev.map((guest, i) =>
+        i === index ? { ...guest, [key]: value } : guest
+      )
+    );
+  };
+
+  const selectedTitle = tour?.title || "";
+  const selectedBadge = tour?.badge || "KIVÁLASZTOTT";
+  const selectedDur = tour?.dur || "—";
+  const selectedPrice = tour?.price;
+  const joinedCount = Number(tour?.joinedCount || 0);
+  const maxPeople = Number(tour?.maxPeople || 20);
+  const remainingPlaces = Number(tour?.remainingPlaces || 0);
+  const soldOut = !!tour?.soldOut;
+
+  const formattedPrice =
+    typeof selectedPrice === "number"
+      ? `${selectedPrice.toLocaleString("hu-HU")} Ft`
+      : "—";
+
+  const guestCount = useMemo(
+    () => Math.max(0, Number(form.people || 1) - 1),
+    [form.people]
+  );
 
   const onSubmit = async (e) => {
     e.preventDefault();
 
-    if (!form.accept) return;
+    if (!form.accept) {
+      Swal.fire({
+        icon: "warning",
+        title: "Fogadd el a feltételeket",
+        text: "Az ÁSZF és az Adatvédelem elfogadása kötelező.",
+      });
+      return;
+    }
 
     if (!token) {
       Swal.fire({
@@ -134,6 +149,55 @@ export default function Foglalas() {
       return;
     }
 
+    if (!tour) {
+      Swal.fire({
+        icon: "error",
+        title: "Nincs betöltött túra",
+        text: "Próbáld meg újra a túra kiválasztását.",
+      });
+      return;
+    }
+
+    if (soldOut || remainingPlaces <= 0) {
+      Swal.fire({
+        icon: "error",
+        title: "Betelt",
+        text: "Erre a túrára már nincs szabad hely.",
+      });
+      return;
+    }
+
+    const parsedPeople = Number(form.people);
+
+    if (!parsedPeople || Number.isNaN(parsedPeople) || parsedPeople < 1) {
+      Swal.fire({
+        icon: "error",
+        title: "Hibás létszám",
+        text: "Adj meg legalább 1 főt.",
+      });
+      return;
+    }
+
+    if (parsedPeople > remainingPlaces) {
+      Swal.fire({
+        icon: "error",
+        title: "Nincs elég hely",
+        text: `Erre a túrára már csak ${remainingPlaces} főnek van hely.`,
+      });
+      return;
+    }
+
+    for (let i = 0; i < guests.length; i += 1) {
+      if (!guests[i].name.trim()) {
+        Swal.fire({
+          icon: "error",
+          title: "Hiányzó vendégnév",
+          text: `A(z) ${i + 1}. vendég nevét töltsd ki.`,
+        });
+        return;
+      }
+    }
+
     try {
       const res = await fetch(`${API_BASE}/api/foglalas`, {
         method: "POST",
@@ -143,11 +207,18 @@ export default function Foglalas() {
         },
         body: JSON.stringify({
           tourId,
-          tourTitle: selectedTitle,
-          tourBadge: selectedBadge,
-          tourDur: selectedDur,
-          tourPrice: selectedPrice,
-          ...form,
+          date: form.date,
+          people: parsedPeople,
+          name: form.name,
+          email: form.email,
+          phone: form.phone,
+          experience: form.experience,
+          health: form.health,
+          emergencyName: form.emergencyName,
+          emergencyPhone: form.emergencyPhone,
+          rental: form.rental,
+          note: form.note,
+          guests,
         }),
       });
 
@@ -160,9 +231,9 @@ export default function Foglalas() {
       Swal.fire({
         icon: "success",
         title: "Sikeres foglalás!",
-        text: `Várunk sok szeretettel a(z) ${selectedTitle} túrán! A részleteket küldjük emailben.`,
+        text: `${selectedTitle} – ${parsedPeople} fő sikeresen rögzítve.`,
         showConfirmButton: false,
-        timer: 3000,
+        timer: 2600,
       });
 
       nav("/turak");
@@ -176,15 +247,27 @@ export default function Foglalas() {
     }
   };
 
-  if (invalidTour) {
+  if (tourLoading) {
+    return (
+      <div className="foglalas-page">
+        <div className="foglalas-container">
+          <div className="foglalas-card glass">
+            <h1>Foglalás</h1>
+            <p className="muted">Túra betöltése...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!tour || tourError) {
     return (
       <div className="foglalas-page">
         <div className="foglalas-container">
           <div className="foglalas-card glass">
             <h1>Foglalás</h1>
             <p className="muted">
-              Foglalni csak konkrét túrára lehet. Menj vissza a listára és
-              kattints a „Foglalom” gombra.
+              {tourError || "Foglalni csak érvényes túrára lehet."}
             </p>
             <div className="actions">
               <Link className="btn-ghost" to="/turak">
@@ -214,18 +297,18 @@ export default function Foglalas() {
           <div className="foglalas-topline">
             <div className="chip">{selectedBadge}</div>
             <div className="chip soft">{selectedDur}</div>
+            <div className="chip soft">{formattedPrice}</div>
             <div className="chip soft">
-              {typeof selectedPrice === "number"
-                ? `${selectedPrice.toLocaleString("hu-HU")} Ft`
-                : "—"}
+              {joinedCount} / {maxPeople} fő
             </div>
+            {soldOut ? <div className="chip">Betelt</div> : null}
           </div>
 
           <div className="foglalas-grid">
             <form className="foglalas-form" onSubmit={onSubmit}>
               <div className="row2">
                 <label>
-                  Név *
+                  Foglaló neve *
                   <input
                     value={form.name}
                     onChange={(e) => set("name", e.target.value)}
@@ -235,7 +318,7 @@ export default function Foglalas() {
                 </label>
 
                 <label>
-                  Email *
+                  Foglaló email *
                   <input
                     value={form.email}
                     onChange={(e) => set("email", e.target.value)}
@@ -248,7 +331,7 @@ export default function Foglalas() {
 
               <div className="row2">
                 <label>
-                  Telefon *
+                  Foglaló telefon *
                   <input
                     value={form.phone}
                     onChange={(e) => set("phone", e.target.value)}
@@ -274,11 +357,14 @@ export default function Foglalas() {
                   Létszám *
                   <input
                     value={form.people}
-                    onChange={(e) => set("people", Number(e.target.value))}
+                    onChange={(e) =>
+                      set("people", Math.max(1, Number(e.target.value) || 1))
+                    }
                     type="number"
                     min={1}
-                    max={20}
+                    max={Math.max(1, remainingPlaces)}
                     required
+                    disabled={soldOut}
                   />
                 </label>
 
@@ -339,6 +425,73 @@ export default function Foglalas() {
                 </select>
               </label>
 
+              {guestCount > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <h3 style={{ marginBottom: 12 }}>Vendégek</h3>
+
+                  {guests.map((guest, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: 16,
+                        padding: 14,
+                        marginBottom: 12,
+                        background: "rgba(255,255,255,0.03)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          marginBottom: 10,
+                          color: "#fff",
+                        }}
+                      >
+                        {index + 1}. vendég
+                      </div>
+
+                      <div className="row2">
+                        <label>
+                          Név *
+                          <input
+                            value={guest.name}
+                            onChange={(e) =>
+                              setGuest(index, "name", e.target.value)
+                            }
+                            required
+                            placeholder="Vendég neve"
+                          />
+                        </label>
+
+                        <label>
+                          Email
+                          <input
+                            value={guest.email}
+                            onChange={(e) =>
+                              setGuest(index, "email", e.target.value)
+                            }
+                            type="email"
+                            placeholder="email@cim.hu"
+                          />
+                        </label>
+                      </div>
+
+                      <label>
+                        Telefon
+                        <input
+                          value={guest.phone}
+                          onChange={(e) =>
+                            setGuest(index, "phone", e.target.value)
+                          }
+                          type="tel"
+                          placeholder="+36 ..."
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <label>
                 Üzenet
                 <textarea
@@ -361,8 +514,12 @@ export default function Foglalas() {
               </label>
 
               <div className="actions">
-                <button className="btn" type="submit" disabled={!form.accept}>
-                  Foglalás elküldése
+                <button
+                  className="btn"
+                  type="submit"
+                  disabled={!form.accept || soldOut}
+                >
+                  {soldOut ? "Betelt" : "Foglalás elküldése"}
                 </button>
 
                 <Link className="btn-ghost" to="/turak">
@@ -377,17 +534,19 @@ export default function Foglalas() {
               <div className="side-box">
                 <strong>{selectedTitle}</strong>
                 <div className="side-sub">{selectedDur}</div>
+                <div className="side-sub">Ár: {formattedPrice}</div>
                 <div className="side-sub">
-                  {typeof selectedPrice === "number"
-                    ? `Ár: ${selectedPrice.toLocaleString("hu-HU")} Ft`
-                    : "Ár: —"}
+                  Csatlakozott: {joinedCount} / {maxPeople} fő
+                </div>
+                <div className="side-sub">
+                  Szabad hely: {remainingPlaces} fő
                 </div>
               </div>
 
               <div className="side-box">
                 <h4>Mi lesz ezután?</h4>
                 <ul>
-                  <li>Visszaigazolás emailben</li>
+                  <li>Foglalás rögzítése a rendszerben</li>
                   <li>Pontos találkozó és idő</li>
                   <li>Felszerelés lista</li>
                   <li>Utolsó update indulás előtt</li>
