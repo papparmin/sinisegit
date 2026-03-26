@@ -36,6 +36,8 @@ const db = mysql.createPool({
   connectionLimit: 10,
 });
 
+const dbPromise = db.promise();
+
 db.getConnection((err, connection) => {
   if (err) {
     console.error("❌ DB hiba:", err.message);
@@ -109,6 +111,12 @@ function deleteLocalImage(relativePath) {
   }
 }
 
+function makeError(message, status = 400) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
 /* =====================================
    MULTER
 ===================================== */
@@ -137,6 +145,179 @@ const upload = multer({
 
 app.get("/api/status", (req, res) => {
   res.json({ message: "Backend fut 🚀" });
+});
+
+/* ===== BÉRLÉS TERMÉKEK LISTA ===== */
+app.get("/api/berles-termekek", (req, res) => {
+  db.query(
+    `SELECT id, nev, kategoria, marka, ar_per_nap, ertekeles, suly_kg, kep, leiras, darabszam, aktiv
+     FROM berles_termekek
+     WHERE aktiv = 1
+     ORDER BY id DESC`,
+    (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: "DB hiba" });
+      }
+
+      res.json(results);
+    }
+  );
+});
+
+/* ===== BÉRLÉS CHECKOUT / KOSÁR LEZÁRÁS ===== */
+app.post("/api/berles/checkout", authMiddleware, async (req, res) => {
+  const { items, kezd, vege } = req.body;
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: "Üres a kosár!" });
+  }
+
+  if (!kezd || !vege) {
+    return res.status(400).json({ error: "Add meg a kezdő és végdátumot!" });
+  }
+
+  const kezdDate = new Date(`${kezd}T00:00:00`);
+  const vegeDate = new Date(`${vege}T00:00:00`);
+
+  if (Number.isNaN(kezdDate.getTime()) || Number.isNaN(vegeDate.getTime())) {
+    return res.status(400).json({ error: "Érvénytelen dátum!" });
+  }
+
+  if (vegeDate < kezdDate) {
+    return res
+      .status(400)
+      .json({ error: "A végdátum nem lehet korábbi, mint a kezdődátum!" });
+  }
+
+  const napok =
+    Math.floor((vegeDate - kezdDate) / (1000 * 60 * 60 * 24)) + 1;
+
+  const normalizedMap = new Map();
+
+  for (const rawItem of items) {
+    const termekId = Number(rawItem.termekId);
+    const mennyiseg = Number(rawItem.mennyiseg || 1);
+
+    if (!termekId || Number.isNaN(termekId)) continue;
+    if (!mennyiseg || Number.isNaN(mennyiseg) || mennyiseg < 1) continue;
+
+    normalizedMap.set(
+      termekId,
+      (normalizedMap.get(termekId) || 0) + mennyiseg
+    );
+  }
+
+  const normalizedItems = Array.from(normalizedMap.entries()).map(
+    ([termekId, mennyiseg]) => ({
+      termekId,
+      mennyiseg,
+    })
+  );
+
+  if (!normalizedItems.length) {
+    return res.status(400).json({ error: "Nincs érvényes termék a kosárban!" });
+  }
+
+  let connection;
+
+  try {
+    connection = await dbPromise.getConnection();
+    await connection.beginTransaction();
+
+    const ids = normalizedItems.map((item) => item.termekId);
+
+    const [products] = await connection.query(
+      `SELECT id, nev, ar_per_nap, darabszam, aktiv
+       FROM berles_termekek
+       WHERE id IN (?)
+       FOR UPDATE`,
+      [ids]
+    );
+
+    if (products.length !== ids.length) {
+      throw makeError("Egy vagy több termék nem található!");
+    }
+
+    const productMap = new Map(products.map((p) => [p.id, p]));
+
+    for (const item of normalizedItems) {
+      const product = productMap.get(item.termekId);
+
+      if (!product) {
+        throw makeError("Egy vagy több termék nem található!");
+      }
+
+      if (!product.aktiv) {
+        throw makeError(`${product.nev} jelenleg nem aktív.`);
+      }
+
+      if (product.darabszam <= 0) {
+        throw makeError(`${product.nev} elfogyott!`);
+      }
+
+      if (product.darabszam < item.mennyiseg) {
+        throw makeError(
+          `${product.nev} termékből csak ${product.darabszam} db maradt.`
+        );
+      }
+    }
+
+    let vegosszeg = 0;
+    const insertRows = [];
+
+    for (const item of normalizedItems) {
+      const product = productMap.get(item.termekId);
+      const lineTotal = product.ar_per_nap * item.mennyiseg * napok;
+
+      await connection.query(
+        "UPDATE berles_termekek SET darabszam = darabszam - ? WHERE id = ?",
+        [item.mennyiseg, item.termekId]
+      );
+
+      insertRows.push([
+        req.user.id,
+        item.termekId,
+        product.nev,
+        item.mennyiseg,
+        kezd,
+        vege,
+        product.ar_per_nap,
+        lineTotal,
+        "uj",
+      ]);
+
+      vegosszeg += lineTotal;
+    }
+
+    await connection.query(
+      `INSERT INTO berles_rendelesek
+      (felhasznalo_id, termek_id, termek_nev, mennyiseg, kezd, vege, napi_ar, vegosszeg, status)
+      VALUES ?`,
+      [insertRows]
+    );
+
+    await connection.commit();
+
+    res.json({
+      message: "Sikeres foglalás!",
+      napok,
+      vegosszeg,
+    });
+  } catch (error) {
+    if (connection) {
+      await connection.rollback();
+    }
+
+    console.error("❌ CHECKOUT HIBA:", error.message);
+
+    return res
+      .status(error.status || 500)
+      .json({ error: error.message || "Foglalási hiba" });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
+  }
 });
 
 /* ===== REGISTER ===== */
@@ -421,7 +602,9 @@ app.put(
           [szerepkor, targetId],
           (updateErr) => {
             if (updateErr) {
-              return res.status(500).json({ error: "Nem sikerült frissíteni a szerepkört!" });
+              return res
+                .status(500)
+                .json({ error: "Nem sikerült frissíteni a szerepkört!" });
             }
 
             res.json({
