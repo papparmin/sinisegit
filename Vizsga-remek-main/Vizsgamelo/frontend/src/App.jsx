@@ -29,6 +29,7 @@ import Profil from "./pages/Profil.jsx";
 import JelszoCsere from "./pages/JelszoCsere.jsx";
 import HelyszinekTerkep from "./pages/HelyszinekTerkep.jsx";
 import Admin from "./pages/Admin.jsx";
+import Fizetes from "./pages/Fizetes.jsx";
 
 // Legal
 import Aszf from "./pages/Aszf.jsx";
@@ -153,7 +154,11 @@ export default function App() {
         <Route
           path="/admin"
           element={
-            <RequireAdmin authed={authed} user={user} onNeedAuth={handleNeedAuth}>
+            <RequireAdmin
+              authed={authed}
+              user={user}
+              onNeedAuth={handleNeedAuth}
+            >
               <Admin />
             </RequireAdmin>
           }
@@ -191,6 +196,15 @@ export default function App() {
           element={
             <RequireAuth authed={authed} onNeedAuth={handleNeedAuth}>
               <Foglalas />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/fizetes"
+          element={
+            <RequireAuth authed={authed} onNeedAuth={handleNeedAuth}>
+              <Fizetes />
             </RequireAuth>
           }
         />
