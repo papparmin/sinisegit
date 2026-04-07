@@ -475,8 +475,12 @@ async function ensureFoglalasokTableShape() {
       sql: "ALTER TABLE foglalasok ADD COLUMN people INT NOT NULL DEFAULT 1 AFTER letszam",
     },
     {
+      name: "nev",
+      sql: "ALTER TABLE foglalasok ADD COLUMN nev VARCHAR(255) NULL AFTER people",
+    },
+    {
       name: "foglalo_nev",
-      sql: "ALTER TABLE foglalasok ADD COLUMN foglalo_nev VARCHAR(255) NULL AFTER people",
+      sql: "ALTER TABLE foglalasok ADD COLUMN foglalo_nev VARCHAR(255) NULL AFTER nev",
     },
     {
       name: "name",
@@ -491,8 +495,12 @@ async function ensureFoglalasokTableShape() {
       sql: "ALTER TABLE foglalasok ADD COLUMN email VARCHAR(255) NULL AFTER foglalo_email",
     },
     {
+      name: "telefon",
+      sql: "ALTER TABLE foglalasok ADD COLUMN telefon VARCHAR(60) NULL AFTER email",
+    },
+    {
       name: "foglalo_telefon",
-      sql: "ALTER TABLE foglalasok ADD COLUMN foglalo_telefon VARCHAR(60) NULL AFTER email",
+      sql: "ALTER TABLE foglalasok ADD COLUMN foglalo_telefon VARCHAR(60) NULL AFTER telefon",
     },
     {
       name: "phone",
@@ -596,10 +604,36 @@ async function ensureFoglalasokTableShape() {
       SET
         letszam = COALESCE(NULLIF(letszam, 0), NULLIF(people, 0), 1),
         people = COALESCE(NULLIF(people, 0), NULLIF(letszam, 0), 1),
+        nev = COALESCE(NULLIF(nev, ''), NULLIF(foglalo_nev, ''), NULLIF(name, '')),
+        foglalo_nev = COALESCE(NULLIF(foglalo_nev, ''), NULLIF(nev, ''), NULLIF(name, '')),
+        name = COALESCE(NULLIF(name, ''), NULLIF(foglalo_nev, ''), NULLIF(nev, '')),
+        telefon = COALESCE(NULLIF(telefon, ''), NULLIF(foglalo_telefon, ''), NULLIF(phone, '')),
+        foglalo_telefon = COALESCE(NULLIF(foglalo_telefon, ''), NULLIF(telefon, ''), NULLIF(phone, '')),
+        phone = COALESCE(NULLIF(phone, ''), NULLIF(foglalo_telefon, ''), NULLIF(telefon, '')),
         status = COALESCE(NULLIF(status, ''), 'uj')
     `);
   } catch (error) {
     console.error("❌ foglalasok normalize hiba:", error.message);
+  }
+
+  try {
+    if (await columnExists("foglalasok", "nev")) {
+      await dbPromise.query(
+        "ALTER TABLE foglalasok MODIFY COLUMN nev VARCHAR(255) NULL"
+      );
+    }
+  } catch (error) {
+    console.error("❌ foglalasok.nev modify hiba:", error.message);
+  }
+
+  try {
+    if (await columnExists("foglalasok", "telefon")) {
+      await dbPromise.query(
+        "ALTER TABLE foglalasok MODIFY COLUMN telefon VARCHAR(60) NULL"
+      );
+    }
+  } catch (error) {
+    console.error("❌ foglalasok.telefon modify hiba:", error.message);
   }
 }
 
@@ -1015,12 +1049,14 @@ app.post("/api/foglalas", authMiddleware, async (req, res) => {
     pushIfExists("letszam", parsedPeople);
     pushIfExists("people", parsedPeople);
 
+    pushIfExists("nev", String(name).trim());
     pushIfExists("foglalo_nev", String(name).trim());
     pushIfExists("name", String(name).trim());
 
     pushIfExists("foglalo_email", String(email).trim());
     pushIfExists("email", String(email).trim());
 
+    pushIfExists("telefon", String(phone).trim());
     pushIfExists("foglalo_telefon", String(phone).trim());
     pushIfExists("phone", String(phone).trim());
 

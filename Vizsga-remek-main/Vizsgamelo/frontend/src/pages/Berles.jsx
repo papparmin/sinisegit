@@ -172,19 +172,13 @@ function enhanceProduct(row, index = 0) {
 
   return {
     id: Number(row.id),
-    name:
-      row.nev && String(row.nev).trim()
-        ? row.nev
-        : fallbackName,
+    name: row.nev && String(row.nev).trim() ? row.nev : fallbackName,
     category,
     brand: row.marka || "Outdoor",
     pricePerDay: Number(row.ar_per_nap || 0),
     rating: Number(row.ertekeles || 0),
     weightKg: Number(row.suly_kg || 0),
-    img:
-      row.kep && String(row.kep).trim()
-        ? row.kep
-        : fallback.image,
+    img: row.kep && String(row.kep).trim() ? row.kep : fallback.image,
     desc:
       row.leiras && String(row.leiras).trim()
         ? row.leiras
@@ -210,9 +204,6 @@ export default function Berles() {
   const [brand, setBrand] = useState("Összes");
   const [onlyAvail, setOnlyAvail] = useState(true);
   const [sort, setSort] = useState("relevance");
-
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(9);
 
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(0);
@@ -318,18 +309,6 @@ export default function Berles() {
     return out;
   }, [items, q, cat, brand, onlyAvail, minPrice, maxPrice, sort]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [q, cat, brand, onlyAvail, minPrice, maxPrice, sort, perPage]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const safePage = Math.min(page, totalPages);
-
-  const paged = useMemo(() => {
-    const start = (safePage - 1) * perPage;
-    return filtered.slice(start, start + perPage);
-  }, [filtered, safePage, perPage]);
-
   const cartDetailed = useMemo(() => {
     return cart
       .map((cartItem) => {
@@ -361,8 +340,6 @@ export default function Berles() {
     setBrand("Összes");
     setOnlyAvail(true);
     setSort("relevance");
-    setPerPage(9);
-    setPage(1);
     setMinPrice(priceBounds.min);
     setMaxPrice(priceBounds.max);
   };
@@ -525,10 +502,8 @@ export default function Berles() {
     }
   };
 
-  const visibleFrom = filtered.length ? (safePage - 1) * perPage + 1 : 0;
-  const visibleTo = filtered.length
-    ? Math.min(safePage * perPage, filtered.length)
-    : 0;
+  const visibleFrom = filtered.length ? 1 : 0;
+  const visibleTo = filtered.length;
 
   return (
     <div className="berles-page">
@@ -540,25 +515,6 @@ export default function Berles() {
             <p>
               Valós outdoor termékek, normális képek, egyszerű időtartam-választás és tovább a fizetésre.
             </p>
-          </div>
-
-          <div className="berles-header-stats">
-            <div className="mini-stat">
-              <span>Találat</span>
-              <strong>{filtered.length}</strong>
-            </div>
-            <div className="mini-stat">
-              <span>Kosár</span>
-              <strong>{cartCount} db</strong>
-            </div>
-            <div className="mini-stat">
-              <span>Napok</span>
-              <strong>{durationDays}</strong>
-            </div>
-            <div className="mini-stat">
-              <span>Összesen</span>
-              <strong>{fmtFt(totalPrice)}</strong>
-            </div>
           </div>
         </section>
 
@@ -657,19 +613,6 @@ export default function Berles() {
                 onChange={(e) => setMaxPrice(Number(e.target.value))}
               />
             </div>
-
-            <label className="field">
-              <span>Termék / oldal</span>
-              <select
-                className="berles-select"
-                value={perPage}
-                onChange={(e) => setPerPage(Number(e.target.value))}
-              >
-                <option value={9}>9 / oldal</option>
-                <option value={12}>12 / oldal</option>
-                <option value={18}>18 / oldal</option>
-              </select>
-            </label>
           </aside>
 
           <main className="products-area">
@@ -677,28 +620,6 @@ export default function Berles() {
               <p>
                 Mutatva: <strong>{visibleFrom}-{visibleTo}</strong> / {filtered.length}
               </p>
-
-              <div className="pager">
-                <button
-                  className="pager-btn"
-                  type="button"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={safePage === 1}
-                >
-                  ←
-                </button>
-                <span className="pager-info">
-                  {safePage} / {totalPages}
-                </span>
-                <button
-                  className="pager-btn"
-                  type="button"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={safePage === totalPages}
-                >
-                  →
-                </button>
-              </div>
             </div>
 
             {loading ? (
@@ -712,7 +633,7 @@ export default function Berles() {
               </div>
             ) : (
               <div className="products-grid">
-                {paged.map((it) => {
+                {filtered.map((it) => {
                   const available = it.darabszam > 0;
 
                   return (

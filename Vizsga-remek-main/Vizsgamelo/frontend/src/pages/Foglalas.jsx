@@ -6,20 +6,54 @@ import { AuthContext } from "../components/AuthContext.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5050";
 
+function getUserKey(user) {
+  return user?.id || user?.email || "guest";
+}
+
+function getBookingDraftStorageKey(user) {
+  return `explore_booking_draft_${getUserKey(user)}`;
+}
+
+function getGuestProfilesStorageKey(user) {
+  return `explore_guest_profiles_${getUserKey(user)}`;
+}
+
+function readJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function getTomorrowSqlDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function Foglalas() {
   const { tourId } = useParams();
   const nav = useNavigate();
   const { user, token } = useContext(AuthContext);
 
-  const [tour, setTour] = useState(null);
-  const [tourLoading, setTourLoading] = useState(true);
-  const [tourError, setTourError] = useState("");
+  const [tours, setTours] = useState([]);
+  const [toursLoading, setToursLoading] = useState(true);
+  const [toursError, setToursError] = useState("");
+
+  const [selectedTourId, setSelectedTourId] = useState(tourId || "");
 
   const [form, setForm] = useState({
     name: "",
     email: "",
     phone: "",
-    date: "",
     people: 1,
     experience: "Kezdő",
     health: "",
@@ -31,44 +65,58 @@ export default function Foglalas() {
   });
 
   const [guests, setGuests] = useState([]);
+  const [savedGuestProfiles, setSavedGuestProfiles] = useState([]);
+  const [selectedProfileByGuestIndex, setSelectedProfileByGuestIndex] = useState(
+    []
+  );
 
   useEffect(() => {
     let mounted = true;
 
-    const fetchTour = async () => {
-      if (!tourId) {
-        setTourLoading(false);
-        setTourError("Hiányzik a túra azonosító.");
-        return;
-      }
-
-      setTourLoading(true);
-      setTourError("");
+    const fetchTours = async () => {
+      setToursLoading(true);
+      setToursError("");
 
       try {
-        const res = await fetch(`${API_BASE}/api/tours/${encodeURIComponent(tourId)}`);
+        const res = await fetch(`${API_BASE}/api/tours`);
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data?.error || "Nem sikerült betölteni a túrát.");
+          throw new Error(data?.error || "Nem sikerült betölteni a túrákat.");
         }
 
-        if (mounted) {
-          setTour(data);
+        if (!mounted) return;
+
+        const list = Array.isArray(data) ? data : [];
+        setTours(list);
+
+        const requestedTourId = String(tourId || "").trim();
+
+        if (requestedTourId) {
+          const matched =
+            list.find((t) => String(t.slug) === requestedTourId) ||
+            list.find((t) => String(t.id) === requestedTourId);
+
+          if (matched) {
+            setSelectedTourId(matched.slug || String(matched.id));
+          } else if (list[0]) {
+            setSelectedTourId(list[0].slug || String(list[0].id));
+          }
+        } else if (list[0]) {
+          setSelectedTourId(list[0].slug || String(list[0].id));
         }
       } catch (err) {
-        if (mounted) {
-          setTour(null);
-          setTourError(err.message || "Nem sikerült betölteni a túrát.");
-        }
+        if (!mounted) return;
+        setTours([]);
+        setToursError(err.message || "Nem sikerült betölteni a túrákat.");
       } finally {
         if (mounted) {
-          setTourLoading(false);
+          setToursLoading(false);
         }
       }
     };
 
-    fetchTour();
+    fetchTours();
 
     return () => {
       mounted = false;
@@ -78,13 +126,55 @@ export default function Foglalas() {
   useEffect(() => {
     if (!user) return;
 
+    const bookingDraft = readJson(getBookingDraftStorageKey(user), null);
+    const profiles = readJson(getGuestProfilesStorageKey(user), []);
+
+    setSavedGuestProfiles(Array.isArray(profiles) ? profiles : []);
+
     setForm((prev) => ({
       ...prev,
-      name: prev.name || user.nev || "",
-      email: prev.email || user.email || "",
-      phone: prev.phone || user.phone || "",
+      name: bookingDraft?.name || user?.nev || prev.name || "",
+      email: bookingDraft?.email || user?.email || prev.email || "",
+      phone: bookingDraft?.phone || prev.phone || "",
+      people: bookingDraft?.people || prev.people || 1,
+      experience: bookingDraft?.experience || prev.experience || "Kezdő",
+      health: bookingDraft?.health || prev.health || "",
+      emergencyName: bookingDraft?.emergencyName || prev.emergencyName || "",
+      emergencyPhone:
+        bookingDraft?.emergencyPhone || prev.emergencyPhone || "",
+      rental: bookingDraft?.rental || prev.rental || "Nem",
+      note: bookingDraft?.note || prev.note || "",
     }));
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    writeJson(getBookingDraftStorageKey(user), {
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      people: form.people,
+      experience: form.experience,
+      health: form.health,
+      emergencyName: form.emergencyName,
+      emergencyPhone: form.emergencyPhone,
+      rental: form.rental,
+      note: form.note,
+    });
+  }, [
+    user,
+    form.name,
+    form.email,
+    form.phone,
+    form.people,
+    form.experience,
+    form.health,
+    form.emergencyName,
+    form.emergencyPhone,
+    form.rental,
+    form.note,
+  ]);
 
   useEffect(() => {
     const guestCount = Math.max(0, Number(form.people || 1) - 1);
@@ -96,7 +186,40 @@ export default function Foglalas() {
         phone: "",
       })
     );
+
+    setSelectedProfileByGuestIndex((prev) =>
+      Array.from({ length: guestCount }, (_, i) => prev[i] || "")
+    );
   }, [form.people]);
+
+  const selectedTour = useMemo(() => {
+    return (
+      tours.find(
+        (t) =>
+          String(t.slug || "") === String(selectedTourId || "") ||
+          String(t.id) === String(selectedTourId || "")
+      ) || null
+    );
+  }, [tours, selectedTourId]);
+
+  const selectedTitle = selectedTour?.title || "";
+  const selectedBadge = selectedTour?.badge || "KIVÁLASZTOTT";
+  const selectedDur = selectedTour?.dur || "—";
+  const selectedPrice = selectedTour?.price;
+  const joinedCount = Number(selectedTour?.joinedCount || 0);
+  const maxPeople = Number(selectedTour?.maxPeople || 20);
+  const remainingPlaces = Number(selectedTour?.remainingPlaces || 0);
+  const soldOut = !!selectedTour?.soldOut;
+
+  const formattedPrice =
+    typeof selectedPrice === "number"
+      ? `${selectedPrice.toLocaleString("hu-HU")} Ft`
+      : "—";
+
+  const guestCount = useMemo(
+    () => Math.max(0, Number(form.people || 1) - 1),
+    [form.people]
+  );
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
@@ -108,24 +231,103 @@ export default function Foglalas() {
     );
   };
 
-  const selectedTitle = tour?.title || "";
-  const selectedBadge = tour?.badge || "KIVÁLASZTOTT";
-  const selectedDur = tour?.dur || "—";
-  const selectedPrice = tour?.price;
-  const joinedCount = Number(tour?.joinedCount || 0);
-  const maxPeople = Number(tour?.maxPeople || 20);
-  const remainingPlaces = Number(tour?.remainingPlaces || 0);
-  const soldOut = !!tour?.soldOut;
+  const saveGuestProfiles = (profiles) => {
+    if (!user) return;
+    writeJson(getGuestProfilesStorageKey(user), profiles);
+    setSavedGuestProfiles(profiles);
+  };
 
-  const formattedPrice =
-    typeof selectedPrice === "number"
-      ? `${selectedPrice.toLocaleString("hu-HU")} Ft`
-      : "—";
+  const saveGuestAsProfile = (index) => {
+    if (!user) {
+      Swal.fire({
+        icon: "warning",
+        title: "Bejelentkezés szükséges",
+        text: "Vendégprofil mentéshez jelentkezz be.",
+      });
+      return;
+    }
 
-  const guestCount = useMemo(
-    () => Math.max(0, Number(form.people || 1) - 1),
-    [form.people]
-  );
+    const guest = guests[index];
+    const cleanName = String(guest?.name || "").trim();
+    const cleanEmail = String(guest?.email || "").trim();
+    const cleanPhone = String(guest?.phone || "").trim();
+
+    if (!cleanName) {
+      Swal.fire({
+        icon: "warning",
+        title: "Hiányzó név",
+        text: "Előbb töltsd ki a vendég nevét.",
+      });
+      return;
+    }
+
+    const exists = savedGuestProfiles.some(
+      (profile) =>
+        String(profile.name || "").trim().toLowerCase() ===
+          cleanName.toLowerCase() &&
+        String(profile.email || "").trim().toLowerCase() ===
+          cleanEmail.toLowerCase() &&
+        String(profile.phone || "").trim() === cleanPhone
+    );
+
+    if (exists) {
+      Swal.fire({
+        icon: "info",
+        title: "Már létezik",
+        text: "Ez a vendégprofil már el van mentve.",
+      });
+      return;
+    }
+
+    const newProfile = {
+      id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      label: cleanName,
+      name: cleanName,
+      email: cleanEmail,
+      phone: cleanPhone,
+    };
+
+    saveGuestProfiles([newProfile, ...savedGuestProfiles]);
+
+    Swal.fire({
+      icon: "success",
+      title: "Vendégprofil mentve",
+      text: `${cleanName} elmentve.`,
+      timer: 1800,
+      showConfirmButton: false,
+    });
+  };
+
+  const loadGuestProfileIntoGuest = (index, profileId) => {
+    setSelectedProfileByGuestIndex((prev) =>
+      prev.map((value, i) => (i === index ? profileId : value))
+    );
+
+    const profile = savedGuestProfiles.find((p) => p.id === profileId);
+    if (!profile) return;
+
+    setGuests((prev) =>
+      prev.map((guest, i) =>
+        i === index
+          ? {
+              ...guest,
+              name: profile.name || "",
+              email: profile.email || "",
+              phone: profile.phone || "",
+            }
+          : guest
+      )
+    );
+  };
+
+  const deleteGuestProfile = (profileId) => {
+    const updated = savedGuestProfiles.filter((p) => p.id !== profileId);
+    saveGuestProfiles(updated);
+
+    setSelectedProfileByGuestIndex((prev) =>
+      prev.map((value) => (value === profileId ? "" : value))
+    );
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -144,16 +346,15 @@ export default function Foglalas() {
         icon: "warning",
         title: "Bejelentkezés szükséges",
         text: "A foglaláshoz kérlek jelentkezz be a fiókodba!",
-        confirmButtonColor: "#3085d6",
       });
       return;
     }
 
-    if (!tour) {
+    if (!selectedTour) {
       Swal.fire({
         icon: "error",
-        title: "Nincs betöltött túra",
-        text: "Próbáld meg újra a túra kiválasztását.",
+        title: "Nincs kiválasztott túra",
+        text: "Válassz egy túrát a listából.",
       });
       return;
     }
@@ -188,7 +389,7 @@ export default function Foglalas() {
     }
 
     for (let i = 0; i < guests.length; i += 1) {
-      if (!guests[i].name.trim()) {
+      if (!String(guests[i].name || "").trim()) {
         Swal.fire({
           icon: "error",
           title: "Hiányzó vendégnév",
@@ -206,8 +407,8 @@ export default function Foglalas() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          tourId,
-          date: form.date,
+          tourId: selectedTour.slug || selectedTour.id,
+          date: getTomorrowSqlDate(),
           people: parsedPeople,
           name: form.name,
           email: form.email,
@@ -242,32 +443,31 @@ export default function Foglalas() {
         icon: "error",
         title: "Sikertelen foglalás",
         text: err.message || "Ismeretlen hiba történt.",
-        confirmButtonColor: "#dc3545",
       });
     }
   };
 
-  if (tourLoading) {
+  if (toursLoading) {
     return (
       <div className="foglalas-page">
         <div className="foglalas-container">
           <div className="foglalas-card glass">
             <h1>Foglalás</h1>
-            <p className="muted">Túra betöltése...</p>
+            <p className="muted">Túrák betöltése...</p>
           </div>
         </div>
       </div>
     );
   }
 
-  if (!tour || tourError) {
+  if (toursError || !tours.length) {
     return (
       <div className="foglalas-page">
         <div className="foglalas-container">
           <div className="foglalas-card glass">
             <h1>Foglalás</h1>
             <p className="muted">
-              {tourError || "Foglalni csak érvényes túrára lehet."}
+              {toursError || "Jelenleg nincs foglalható túra."}
             </p>
             <div className="actions">
               <Link className="btn-ghost" to="/turak">
@@ -288,7 +488,7 @@ export default function Foglalas() {
           <div>
             <h1>Foglalás</h1>
             <p className="muted">
-              Foglalás erre: <strong className="strong">{selectedTitle}</strong>
+              Válassz túrát, add meg az adatokat, és ments vendégprofilokat.
             </p>
           </div>
         </div>
@@ -306,6 +506,26 @@ export default function Foglalas() {
 
           <div className="foglalas-grid">
             <form className="foglalas-form" onSubmit={onSubmit}>
+              <label>
+                Túra kiválasztása *
+                <select
+                  value={selectedTourId}
+                  onChange={(e) => setSelectedTourId(e.target.value)}
+                  required
+                >
+                  {tours.map((tour) => (
+                    <option
+                      key={tour.slug || tour.id}
+                      value={tour.slug || String(tour.id)}
+                    >
+                      {tour.title} — {typeof tour.price === "number"
+                        ? `${tour.price.toLocaleString("hu-HU")} Ft`
+                        : "Ár nincs"} — {tour.remainingPlaces || 0} szabad hely
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <div className="row2">
                 <label>
                   Foglaló neve *
@@ -342,18 +562,6 @@ export default function Foglalas() {
                 </label>
 
                 <label>
-                  Dátum *
-                  <input
-                    value={form.date}
-                    onChange={(e) => set("date", e.target.value)}
-                    required
-                    type="date"
-                  />
-                </label>
-              </div>
-
-              <div className="row2">
-                <label>
                   Létszám *
                   <input
                     value={form.people}
@@ -367,7 +575,9 @@ export default function Foglalas() {
                     disabled={soldOut}
                   />
                 </label>
+              </div>
 
+              <div className="row2">
                 <label>
                   Tapasztalat *
                   <select
@@ -378,6 +588,18 @@ export default function Foglalas() {
                     <option>Kezdő</option>
                     <option>Haladó</option>
                     <option>Profi</option>
+                  </select>
+                </label>
+
+                <label>
+                  Felszerelés bérlés
+                  <select
+                    value={form.rental}
+                    onChange={(e) => set("rental", e.target.value)}
+                  >
+                    <option>Nem</option>
+                    <option>Igen</option>
+                    <option>Nem tudom</option>
                   </select>
                 </label>
               </div>
@@ -413,18 +635,6 @@ export default function Foglalas() {
                 </label>
               </div>
 
-              <label>
-                Felszerelés bérlés
-                <select
-                  value={form.rental}
-                  onChange={(e) => set("rental", e.target.value)}
-                >
-                  <option>Nem</option>
-                  <option>Igen</option>
-                  <option>Nem tudom</option>
-                </select>
-              </label>
-
               {guestCount > 0 && (
                 <div style={{ marginTop: 8 }}>
                   <h3 style={{ marginBottom: 12 }}>Vendégek</h3>
@@ -442,13 +652,51 @@ export default function Foglalas() {
                     >
                       <div
                         style={{
-                          fontWeight: 700,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 12,
                           marginBottom: 10,
-                          color: "#fff",
                         }}
                       >
-                        {index + 1}. vendég
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            color: "#fff",
+                          }}
+                        >
+                          {index + 1}. vendég
+                        </div>
+
+                        {user ? (
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={() => saveGuestAsProfile(index)}
+                          >
+                            Vendégprofil mentése
+                          </button>
+                        ) : null}
                       </div>
+
+                      {user && savedGuestProfiles.length > 0 ? (
+                        <label style={{ marginBottom: 10, display: "block" }}>
+                          Mentett vendégprofil betöltése
+                          <select
+                            value={selectedProfileByGuestIndex[index] || ""}
+                            onChange={(e) =>
+                              loadGuestProfileIntoGuest(index, e.target.value)
+                            }
+                          >
+                            <option value="">Kézi kitöltés</option>
+                            {savedGuestProfiles.map((profile) => (
+                              <option key={profile.id} value={profile.id}>
+                                {profile.label || profile.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
 
                       <div className="row2">
                         <label>
@@ -532,7 +780,7 @@ export default function Foglalas() {
               <h3>Kiválasztott túra</h3>
 
               <div className="side-box">
-                <strong>{selectedTitle}</strong>
+                <strong>{selectedTitle || "Nincs kiválasztva"}</strong>
                 <div className="side-sub">{selectedDur}</div>
                 <div className="side-sub">Ár: {formattedPrice}</div>
                 <div className="side-sub">
@@ -547,11 +795,63 @@ export default function Foglalas() {
                 <h4>Mi lesz ezután?</h4>
                 <ul>
                   <li>Foglalás rögzítése a rendszerben</li>
-                  <li>Pontos találkozó és idő</li>
+                  <li>Pontos találkozó és infók</li>
                   <li>Felszerelés lista</li>
                   <li>Utolsó update indulás előtt</li>
                 </ul>
               </div>
+
+              {user ? (
+                <div className="side-box">
+                  <h4>Mentett vendégprofilok</h4>
+                  {!savedGuestProfiles.length ? (
+                    <div className="side-sub">
+                      Még nincs mentett vendégprofilod.
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {savedGuestProfiles.map((profile) => (
+                        <div
+                          key={profile.id}
+                          style={{
+                            padding: 10,
+                            borderRadius: 12,
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid rgba(255,255,255,0.06)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: "#fff",
+                              fontWeight: 700,
+                              marginBottom: 4,
+                            }}
+                          >
+                            {profile.label || profile.name}
+                          </div>
+                          <div className="side-sub">{profile.name}</div>
+                          {profile.email ? (
+                            <div className="side-sub">{profile.email}</div>
+                          ) : null}
+                          {profile.phone ? (
+                            <div className="side-sub">{profile.phone}</div>
+                          ) : null}
+
+                          <div style={{ marginTop: 8 }}>
+                            <button
+                              type="button"
+                              className="btn-ghost"
+                              onClick={() => deleteGuestProfile(profile.id)}
+                            >
+                              Törlés
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </aside>
           </div>
         </div>
