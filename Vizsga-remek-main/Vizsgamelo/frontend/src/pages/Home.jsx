@@ -17,6 +17,8 @@ const SectionHead = ({ title, subtitle }) => (
 
 const Home = () => {
   useEffect(() => {
+    console.log("EZ AZ UJ HOME FUT");
+
     const els = document.querySelectorAll(".reveal");
     const io = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && e.target.classList.add("active")),
@@ -227,7 +229,6 @@ const Home = () => {
   const prev = () => setGIndex((i) => (i - 1 + gallery.length) % gallery.length);
   const next = () => setGIndex((i) => (i + 1) % gallery.length);
 
-  // Galéria billentyűzetes navigáció – nyilakkal lapozás, oldalgörgetés megakadályozása
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === "ArrowLeft") {
@@ -250,6 +251,7 @@ const Home = () => {
 
   const spotifyRef = useRef(null);
   const [spotifyIn, setSpotifyIn] = useState(false);
+
   useEffect(() => {
     const el = spotifyRef.current;
     if (!el) return;
@@ -260,6 +262,94 @@ const Home = () => {
     io.observe(el);
     return () => io.disconnect();
   }, []);
+
+  const [contactForm, setContactForm] = useState({
+    nev: "",
+    email: "",
+    targy: "",
+    uzenet: "",
+  });
+
+  const [contactSending, setContactSending] = useState(false);
+  const [contactMessage, setContactMessage] = useState({
+    text: "",
+    type: "",
+  });
+
+  const handleContactChange = (e) => {
+    const { name, value } = e.target;
+    setContactForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleContactSubmit = async (e) => {
+    e.preventDefault();
+
+    if (
+      !contactForm.nev.trim() ||
+      !contactForm.email.trim() ||
+      !contactForm.uzenet.trim()
+    ) {
+      setContactMessage({
+        text: "Kérlek add meg a nevedet, az emailedet és az üzenetedet is.",
+        type: "error",
+      });
+      return;
+    }
+
+    setContactSending(true);
+    setContactMessage({ text: "", type: "" });
+
+    try {
+      console.log("CONTACT SEND TO:", "http://localhost:5050/api/contact");
+
+      const res = await fetch("http://localhost:5050/api/contact", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nev: contactForm.nev.trim(),
+          email: contactForm.email.trim(),
+          targy: contactForm.targy.trim(),
+          uzenet: contactForm.uzenet.trim(),
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setContactMessage({
+          text: data?.error || "Nem sikerült elküldeni az üzenetet. Próbáld meg újra.",
+          type: "error",
+        });
+        return;
+      }
+
+      setContactMessage({
+        text:
+          data?.message ||
+          "Köszönjük az üzenetedet! Hamarosan jelentkezünk a megadott elérhetőségen.",
+        type: "success",
+      });
+
+      setContactForm({
+        nev: "",
+        email: "",
+        targy: "",
+        uzenet: "",
+      });
+    } catch (error) {
+      setContactMessage({
+        text: "Hálózati hiba történt. Kérlek próbáld meg újra egy kicsit később.",
+        type: "error",
+      });
+    } finally {
+      setContactSending(false);
+    }
+  };
 
   return (
     <div className="home-page">
@@ -448,7 +538,6 @@ const Home = () => {
 
       <div className="black-sep" />
 
-      {/* GALÉRIA – eredeti elrendezés, de a nyilak középre igazítva a gombokban */}
       <section className="gallery-pro" id="gallery">
         <div className="container">
           <SectionHead
@@ -730,8 +819,8 @@ const Home = () => {
       <section id="contact" className="contact-section">
         <div className="container">
           <SectionHead
-            title="Írj nekünk"
-            subtitle="Gyors válasz, normális hang. Mondd meg mit szeretnél és összerakjuk."
+            title="Kapcsolat"
+            subtitle="Kérdésed van egy túrával, felszereléssel vagy egyedi csapatprogrammal kapcsolatban? Írj nekünk, és igyekszünk minél hamarabb válaszolni."
           />
 
           <div className="contact-grid">
@@ -741,41 +830,94 @@ const Home = () => {
                   <span className="brand-mark small" />
                   <span className="section-logo-text">EXPLORE.</span>
                 </span>
-                <span className="contact-badge">Kapcsolat</span>
+                <span className="contact-badge">Üzenetküldés</span>
               </div>
 
-              <form className="contact-form" onSubmit={(e) => e.preventDefault()}>
+              <form className="contact-form" onSubmit={handleContactSubmit}>
                 <label>
                   Név
-                  <input type="text" placeholder="Pl. Ármin" />
+                  <input
+                    type="text"
+                    name="nev"
+                    placeholder="Add meg a neved"
+                    value={contactForm.nev}
+                    onChange={handleContactChange}
+                  />
                 </label>
+
                 <label>
                   Email
-                  <input type="email" placeholder="email@pelda.hu" />
+                  <input
+                    type="email"
+                    name="email"
+                    placeholder="email@pelda.hu"
+                    value={contactForm.email}
+                    onChange={handleContactChange}
+                  />
                 </label>
+
+                <label>
+                  Tárgy
+                  <input
+                    type="text"
+                    name="targy"
+                    placeholder="Például: túrafoglalás, céges csapatépítő, felszerelés bérlés"
+                    value={contactForm.targy}
+                    onChange={handleContactChange}
+                  />
+                </label>
+
                 <label>
                   Üzenet
                   <textarea
                     rows="5"
-                    placeholder="Mikor, hány fő, milyen szint, mi érdekel?"
+                    name="uzenet"
+                    placeholder="Írd meg nyugodtan, miben segíthetünk. Például mikorra terveztek, hány fővel jönnétek, és milyen nehézségű túra érdekel."
+                    value={contactForm.uzenet}
+                    onChange={handleContactChange}
                   />
                 </label>
 
+                {contactMessage.text ? (
+                  <div
+                    style={{
+                      marginTop: 4,
+                      padding: "12px 14px",
+                      borderRadius: 14,
+                      border:
+                        contactMessage.type === "success"
+                          ? "1px solid rgba(46,204,113,.28)"
+                          : "1px solid rgba(255,90,90,.28)",
+                      background:
+                        contactMessage.type === "success"
+                          ? "rgba(46,204,113,.10)"
+                          : "rgba(255,90,90,.10)",
+                      color: "rgba(255,255,255,.92)",
+                      fontSize: 14,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    {contactMessage.text}
+                  </div>
+                ) : null}
+
                 <div className="contact-actions">
-                  <button className="btn" type="submit">
-                    Küldés
+                  <button className="btn" type="submit" disabled={contactSending}>
+                    {contactSending ? "Küldés..." : "Üzenet elküldése"}
                   </button>
+
                   <Link className="btn btn-ghost" to="/turak">
-                    Inkább túrát választok
+                    Inkább megnézem a túrákat
                   </Link>
                 </div>
               </form>
             </div>
 
             <div className="contact-side glass reveal">
-              <h3>Elérhetőség</h3>
+              <h3>Elérhetőségeink</h3>
               <p className="contact-muted">
-                Ha gyorsabb: írj vagy csörögj. Nem robot, ember válaszol.
+                Ha egyszerűbb, közvetlenül is kereshetsz minket. Szívesen segítünk
+                túraválasztásban, felszerelésben vagy egyedi kérdésekben is.
               </p>
 
               <div className="contact-info">
@@ -800,8 +942,9 @@ const Home = () => {
               </div>
 
               <div className="contact-mini">
-                <strong>Pro tipp:</strong> írd bele az üzenetbe a dátumot + szintet, és 2 körrel
-                kevesebb pingpong lesz.
+                <strong>Tipp:</strong> ha tudod, írd meg az üzenetben a tervezett dátumot,
+                a létszámot és azt is, milyen szintű túra érdekel. Így gyorsabban tudunk
+                pontos választ adni.
               </div>
             </div>
           </div>

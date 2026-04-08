@@ -1,9 +1,12 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
+const nodemailer = require("nodemailer");
 const path = require("path");
 const fs = require("fs");
 
@@ -46,6 +49,65 @@ db.getConnection((err, connection) => {
     connection.release();
   }
 });
+
+/* =====================================
+   MAIL
+===================================== */
+const mailTransporter = nodemailer.createTransport({
+  host: process.env.MAIL_HOST || "smtp.gmail.com",
+  port: Number(process.env.MAIL_PORT || 587),
+  secure: false,
+  auth: {
+    user: process.env.MAIL_USER || "",
+    pass: process.env.MAIL_PASS || "",
+  },
+});
+
+async function sendContactReplyEmail({ toEmail, toName, subject, adminReply }) {
+  console.log("MAIL USER:", process.env.MAIL_USER);
+  console.log("MAIL PASS EXISTS:", !!process.env.MAIL_PASS);
+  console.log("MAIL TO:", toEmail);
+
+  if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
+    throw new Error("A levélküldéshez hiányzik a MAIL_USER vagy MAIL_PASS.");
+  }
+
+  const fromName = process.env.MAIL_FROM_NAME || "EXPLORE";
+  const safeName = String(toName || "Érdeklődő").trim() || "Érdeklődő";
+  const safeSubject =
+    String(subject || "Kapcsolati megkeresés").trim() ||
+    "Kapcsolati megkeresés";
+  const safeReply = String(adminReply || "").trim();
+
+  await mailTransporter.sendMail({
+    from: `"${fromName}" <${process.env.MAIL_USER}>`,
+    to: toEmail,
+    subject: `Válasz az üzenetedre – ${safeSubject}`,
+    text: `Szia ${safeName}!
+
+Köszönjük, hogy írtál nekünk.
+
+Az üzenetedre az alábbi választ küldjük:
+
+${safeReply}
+
+Üdv,
+${fromName}
+${process.env.MAIL_USER}`,
+    html: `
+      <div style="font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #111;">
+        <p>Szia ${safeName}!</p>
+        <p>Köszönjük, hogy írtál nekünk.</p>
+        <p>Az üzenetedre az alábbi választ küldjük:</p>
+        <div style="padding: 14px 16px; background: #f5f7f8; border: 1px solid #dfe5e8; border-radius: 10px; white-space: pre-wrap;">${safeReply
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")}</div>
+        <p style="margin-top: 18px;">Üdv,<br/><strong>${fromName}</strong></p>
+      </div>
+    `,
+  });
+}
 
 /* =====================================
    JWT
@@ -137,6 +199,41 @@ function isValidSqlDateString(value) {
 
 function getTodaySqlDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function calculateAge(dateValue) {
+  if (!dateValue) return null;
+
+  const birthDate = new Date(dateValue);
+  if (Number.isNaN(birthDate.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  const dayDiff = today.getDate() - birthDate.getDate();
+
+  if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
+    age -= 1;
+  }
+
+  if (age < 0 || age > 120) return null;
+  return age;
+}
+
+function getAgeGroup(age) {
+  if (typeof age !== "number" || Number.isNaN(age)) return null;
+  if (age < 18) return "18 év alatt";
+  if (age <= 24) return "18-24";
+  if (age <= 34) return "25-34";
+  if (age <= 44) return "35-44";
+  if (age <= 54) return "45-54";
+  return "55+";
+}
+
+function normalizeCity(value) {
+  const city = String(value || "").trim();
+  return city || "";
 }
 
 async function createUniqueTourSlug(baseText) {
@@ -294,14 +391,8 @@ async function ensureTurakTableShape() {
   `);
 
   const missingColumns = [
-    {
-      name: "slug",
-      sql: "ALTER TABLE turak ADD COLUMN slug VARCHAR(180) NULL AFTER id",
-    },
-    {
-      name: "cim",
-      sql: "ALTER TABLE turak ADD COLUMN cim VARCHAR(255) NULL AFTER slug",
-    },
+    { name: "slug", sql: "ALTER TABLE turak ADD COLUMN slug VARCHAR(180) NULL AFTER id" },
+    { name: "cim", sql: "ALTER TABLE turak ADD COLUMN cim VARCHAR(255) NULL AFTER slug" },
     {
       name: "rovid_leiras",
       sql: "ALTER TABLE turak ADD COLUMN rovid_leiras VARCHAR(255) NULL AFTER cim",
@@ -383,9 +474,7 @@ async function ensureTurakTableShape() {
   const kepExists = await columnExists("turak", "kep");
   if (kepExists) {
     try {
-      await dbPromise.query(
-        "ALTER TABLE turak MODIFY COLUMN kep VARCHAR(2000) NULL"
-      );
+      await dbPromise.query("ALTER TABLE turak MODIFY COLUMN kep VARCHAR(2000) NULL");
     } catch (error) {
       console.error("❌ kep oszlop módosítás hiba:", error.message);
     }
@@ -393,9 +482,7 @@ async function ensureTurakTableShape() {
 
   const slugIndexExists = await indexExists("turak", "uq_turak_slug");
   if (!slugIndexExists) {
-    await dbPromise.query(
-      "ALTER TABLE turak ADD UNIQUE KEY uq_turak_slug (slug)"
-    );
+    await dbPromise.query("ALTER TABLE turak ADD UNIQUE KEY uq_turak_slug (slug)");
   }
 }
 
@@ -426,22 +513,10 @@ async function ensureFoglalasokTableShape() {
   `);
 
   const missingColumns = [
-    {
-      name: "felhasznalo_id",
-      sql: "ALTER TABLE foglalasok ADD COLUMN felhasznalo_id INT NULL AFTER id",
-    },
-    {
-      name: "user_id",
-      sql: "ALTER TABLE foglalasok ADD COLUMN user_id INT NULL AFTER felhasznalo_id",
-    },
-    {
-      name: "tura_id",
-      sql: "ALTER TABLE foglalasok ADD COLUMN tura_id INT NULL AFTER user_id",
-    },
-    {
-      name: "tour_id",
-      sql: "ALTER TABLE foglalasok ADD COLUMN tour_id INT NULL AFTER tura_id",
-    },
+    { name: "felhasznalo_id", sql: "ALTER TABLE foglalasok ADD COLUMN felhasznalo_id INT NULL AFTER id" },
+    { name: "user_id", sql: "ALTER TABLE foglalasok ADD COLUMN user_id INT NULL AFTER felhasznalo_id" },
+    { name: "tura_id", sql: "ALTER TABLE foglalasok ADD COLUMN tura_id INT NULL AFTER user_id" },
+    { name: "tour_id", sql: "ALTER TABLE foglalasok ADD COLUMN tour_id INT NULL AFTER tura_id" },
     {
       name: "tura_slug",
       sql: "ALTER TABLE foglalasok ADD COLUMN tura_slug VARCHAR(180) NULL AFTER tour_id",
@@ -458,54 +533,27 @@ async function ensureFoglalasokTableShape() {
       name: "tour_title",
       sql: "ALTER TABLE foglalasok ADD COLUMN tour_title VARCHAR(255) NULL AFTER tura_cim",
     },
-    {
-      name: "datum",
-      sql: "ALTER TABLE foglalasok ADD COLUMN datum DATE NULL AFTER tour_title",
-    },
-    {
-      name: "date",
-      sql: "ALTER TABLE foglalasok ADD COLUMN date DATE NULL AFTER datum",
-    },
-    {
-      name: "letszam",
-      sql: "ALTER TABLE foglalasok ADD COLUMN letszam INT NOT NULL DEFAULT 1 AFTER date",
-    },
-    {
-      name: "people",
-      sql: "ALTER TABLE foglalasok ADD COLUMN people INT NOT NULL DEFAULT 1 AFTER letszam",
-    },
-    {
-      name: "nev",
-      sql: "ALTER TABLE foglalasok ADD COLUMN nev VARCHAR(255) NULL AFTER people",
-    },
+    { name: "datum", sql: "ALTER TABLE foglalasok ADD COLUMN datum DATE NULL AFTER tour_title" },
+    { name: "date", sql: "ALTER TABLE foglalasok ADD COLUMN date DATE NULL AFTER datum" },
+    { name: "letszam", sql: "ALTER TABLE foglalasok ADD COLUMN letszam INT NOT NULL DEFAULT 1 AFTER date" },
+    { name: "people", sql: "ALTER TABLE foglalasok ADD COLUMN people INT NOT NULL DEFAULT 1 AFTER letszam" },
+    { name: "nev", sql: "ALTER TABLE foglalasok ADD COLUMN nev VARCHAR(255) NULL AFTER people" },
     {
       name: "foglalo_nev",
       sql: "ALTER TABLE foglalasok ADD COLUMN foglalo_nev VARCHAR(255) NULL AFTER nev",
     },
-    {
-      name: "name",
-      sql: "ALTER TABLE foglalasok ADD COLUMN name VARCHAR(255) NULL AFTER foglalo_nev",
-    },
+    { name: "name", sql: "ALTER TABLE foglalasok ADD COLUMN name VARCHAR(255) NULL AFTER foglalo_nev" },
     {
       name: "foglalo_email",
       sql: "ALTER TABLE foglalasok ADD COLUMN foglalo_email VARCHAR(255) NULL AFTER name",
     },
-    {
-      name: "email",
-      sql: "ALTER TABLE foglalasok ADD COLUMN email VARCHAR(255) NULL AFTER foglalo_email",
-    },
-    {
-      name: "telefon",
-      sql: "ALTER TABLE foglalasok ADD COLUMN telefon VARCHAR(60) NULL AFTER email",
-    },
+    { name: "email", sql: "ALTER TABLE foglalasok ADD COLUMN email VARCHAR(255) NULL AFTER foglalo_email" },
+    { name: "telefon", sql: "ALTER TABLE foglalasok ADD COLUMN telefon VARCHAR(60) NULL AFTER email" },
     {
       name: "foglalo_telefon",
       sql: "ALTER TABLE foglalasok ADD COLUMN foglalo_telefon VARCHAR(60) NULL AFTER telefon",
     },
-    {
-      name: "phone",
-      sql: "ALTER TABLE foglalasok ADD COLUMN phone VARCHAR(60) NULL AFTER foglalo_telefon",
-    },
+    { name: "phone", sql: "ALTER TABLE foglalasok ADD COLUMN phone VARCHAR(60) NULL AFTER foglalo_telefon" },
     {
       name: "tapasztalat",
       sql: "ALTER TABLE foglalasok ADD COLUMN tapasztalat VARCHAR(100) DEFAULT 'Kezdő' AFTER phone",
@@ -514,14 +562,8 @@ async function ensureFoglalasokTableShape() {
       name: "experience",
       sql: "ALTER TABLE foglalasok ADD COLUMN experience VARCHAR(100) DEFAULT 'Kezdő' AFTER tapasztalat",
     },
-    {
-      name: "egeszseg",
-      sql: "ALTER TABLE foglalasok ADD COLUMN egeszseg TEXT NULL AFTER experience",
-    },
-    {
-      name: "health",
-      sql: "ALTER TABLE foglalasok ADD COLUMN health TEXT NULL AFTER egeszseg",
-    },
+    { name: "egeszseg", sql: "ALTER TABLE foglalasok ADD COLUMN egeszseg TEXT NULL AFTER experience" },
+    { name: "health", sql: "ALTER TABLE foglalasok ADD COLUMN health TEXT NULL AFTER egeszseg" },
     {
       name: "veszhelyzeti_nev",
       sql: "ALTER TABLE foglalasok ADD COLUMN veszhelyzeti_nev VARCHAR(255) NULL AFTER health",
@@ -550,10 +592,7 @@ async function ensureFoglalasokTableShape() {
       name: "megjegyzes",
       sql: "ALTER TABLE foglalasok ADD COLUMN megjegyzes TEXT NULL AFTER rental",
     },
-    {
-      name: "note",
-      sql: "ALTER TABLE foglalasok ADD COLUMN note TEXT NULL AFTER megjegyzes",
-    },
+    { name: "note", sql: "ALTER TABLE foglalasok ADD COLUMN note TEXT NULL AFTER megjegyzes" },
     {
       name: "status",
       sql: "ALTER TABLE foglalasok ADD COLUMN status VARCHAR(50) NOT NULL DEFAULT 'uj' AFTER note",
@@ -618,9 +657,7 @@ async function ensureFoglalasokTableShape() {
 
   try {
     if (await columnExists("foglalasok", "nev")) {
-      await dbPromise.query(
-        "ALTER TABLE foglalasok MODIFY COLUMN nev VARCHAR(255) NULL"
-      );
+      await dbPromise.query("ALTER TABLE foglalasok MODIFY COLUMN nev VARCHAR(255) NULL");
     }
   } catch (error) {
     console.error("❌ foglalasok.nev modify hiba:", error.message);
@@ -628,9 +665,7 @@ async function ensureFoglalasokTableShape() {
 
   try {
     if (await columnExists("foglalasok", "telefon")) {
-      await dbPromise.query(
-        "ALTER TABLE foglalasok MODIFY COLUMN telefon VARCHAR(60) NULL"
-      );
+      await dbPromise.query("ALTER TABLE foglalasok MODIFY COLUMN telefon VARCHAR(60) NULL");
     }
   } catch (error) {
     console.error("❌ foglalasok.telefon modify hiba:", error.message);
@@ -791,6 +826,192 @@ const upload = multer({
 app.get("/api/status", (req, res) => {
   res.json({ message: "Backend fut 🚀" });
 });
+
+/* ===== KAPCSOLAT / ÍRJ NEKÜNK ===== */
+app.post("/api/contact", async (req, res) => {
+  console.log("CONTACT ROUTE ELÉRVE");
+  console.log("CONTACT BODY:", req.body);
+
+  try {
+    const { nev, email, targy, uzenet } = req.body;
+
+    if (!nev || !String(nev).trim()) {
+      return res.status(400).json({ error: "A név megadása kötelező." });
+    }
+
+    if (!email || !String(email).trim()) {
+      return res.status(400).json({ error: "Az email cím megadása kötelező." });
+    }
+
+    if (!uzenet || !String(uzenet).trim()) {
+      return res.status(400).json({ error: "Az üzenet megadása kötelező." });
+    }
+
+    const cleanNev = String(nev).trim();
+    const cleanEmail = String(email).trim();
+    const cleanTargy = String(targy || "").trim() || null;
+    const cleanUzenet = String(uzenet).trim();
+
+    console.log("CONTACT INSERT indul");
+
+    await dbPromise.query(
+      `
+      INSERT INTO kapcsolat_uzenetek
+      (user_id, nev, email, targy, uzenet, status)
+      VALUES (?, ?, ?, ?, ?, 'uj')
+      `,
+      [null, cleanNev, cleanEmail, cleanTargy, cleanUzenet]
+    );
+
+    console.log("CONTACT INSERT kész");
+
+    return res.status(201).json({
+      message: "Köszönjük az üzenetedet! Hamarosan felvesszük veled a kapcsolatot.",
+    });
+  } catch (error) {
+    console.error("❌ CONTACT HIBA:", error);
+    return res.status(500).json({
+      error: "Nem sikerült elküldeni az üzenetet. Próbáld meg újra.",
+    });
+  }
+});
+
+/* ===== ADMIN CONTACT MESSAGES ===== */
+app.get(
+  "/api/admin/contact-messages",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const [rows] = await dbPromise.query(`
+        SELECT
+          ku.id,
+          ku.user_id,
+          ku.nev,
+          ku.email,
+          ku.targy,
+          ku.uzenet,
+          ku.status,
+          ku.admin_valasz,
+          ku.admin_id,
+          ku.valaszolva_ekkor,
+          ku.letrehozva,
+          f.nev AS admin_nev
+        FROM kapcsolat_uzenetek ku
+        LEFT JOIN felhasznalok f ON f.id = ku.admin_id
+        ORDER BY ku.letrehozva DESC, ku.id DESC
+      `);
+
+      res.json(rows || []);
+    } catch (error) {
+      console.error("❌ ADMIN CONTACT LIST HIBA:", error.message);
+      res.status(500).json({ error: "Nem sikerült betölteni az üzeneteket." });
+    }
+  }
+);
+
+app.put(
+  "/api/admin/contact-messages/:id/status",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const messageId = Number(req.params.id);
+      const { status } = req.body;
+
+      if (!messageId || Number.isNaN(messageId)) {
+        return res.status(400).json({ error: "Érvénytelen üzenet azonosító!" });
+      }
+
+      if (!["uj", "folyamatban", "megvalaszolva", "lezarva"].includes(status)) {
+        return res.status(400).json({ error: "Érvénytelen státusz!" });
+      }
+
+      const [existing] = await dbPromise.query(
+        "SELECT id FROM kapcsolat_uzenetek WHERE id = ? LIMIT 1",
+        [messageId]
+      );
+
+      if (!existing.length) {
+        return res.status(404).json({ error: "Az üzenet nem található!" });
+      }
+
+      await dbPromise.query(
+        "UPDATE kapcsolat_uzenetek SET status = ? WHERE id = ?",
+        [status, messageId]
+      );
+
+      res.json({ message: "Üzenet státusz frissítve." });
+    } catch (error) {
+      console.error("❌ ADMIN CONTACT STATUS HIBA:", error.message);
+      res.status(500).json({ error: "Nem sikerült frissíteni a státuszt." });
+    }
+  }
+);
+
+app.put(
+  "/api/admin/contact-messages/:id/reply",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const messageId = Number(req.params.id);
+      const { adminValasz } = req.body;
+
+      if (!messageId || Number.isNaN(messageId)) {
+        return res.status(400).json({ error: "Érvénytelen üzenet azonosító!" });
+      }
+
+      if (!adminValasz || !String(adminValasz).trim()) {
+        return res.status(400).json({ error: "Az admin válasz nem lehet üres." });
+      }
+
+      const [rows] = await dbPromise.query(
+        `
+        SELECT id, nev, email, targy
+        FROM kapcsolat_uzenetek
+        WHERE id = ?
+        LIMIT 1
+        `,
+        [messageId]
+      );
+
+      if (!rows.length) {
+        return res.status(404).json({ error: "Az üzenet nem található!" });
+      }
+
+      const targetMessage = rows[0];
+      const cleanReply = String(adminValasz).trim();
+
+      await sendContactReplyEmail({
+        toEmail: targetMessage.email,
+        toName: targetMessage.nev,
+        subject: targetMessage.targy || "Kapcsolati megkeresés",
+        adminReply: cleanReply,
+      });
+
+      await dbPromise.query(
+        `
+        UPDATE kapcsolat_uzenetek
+        SET
+          admin_valasz = ?,
+          admin_id = ?,
+          status = 'megvalaszolva',
+          valaszolva_ekkor = NOW()
+        WHERE id = ?
+        `,
+        [cleanReply, req.user.id, messageId]
+      );
+
+      res.json({ message: "Admin válasz elmentve és emailben elküldve." });
+    } catch (error) {
+      console.error("❌ ADMIN CONTACT REPLY HIBA:", error);
+      res.status(500).json({
+        error: error?.message || "Nem sikerült elmenteni és elküldeni a választ.",
+      });
+    }
+  }
+);
 
 /* ===== TÚRÁK LISTA MINDENKINEK ===== */
 app.get("/api/tours", async (req, res) => {
@@ -1347,17 +1568,27 @@ app.post("/api/berles/checkout", authMiddleware, async (req, res) => {
 
 /* ===== REGISTER ===== */
 app.post("/api/register", async (req, res) => {
-  const { firstName, lastName, email, password } = req.body;
+  const { firstName, lastName, email, password, city, birthDate } = req.body;
 
-  if (!firstName || !lastName || !email || !password) {
+  if (!firstName || !lastName || !email || !password || !city) {
     return res.status(400).json({ error: "Hiányzó adatok!" });
   }
 
+  if (String(password).trim().length < 6) {
+    return res.status(400).json({ error: "A jelszó legalább 6 karakter legyen!" });
+  }
+
+  if (birthDate && !isValidSqlDateString(birthDate)) {
+    return res.status(400).json({ error: "Érvénytelen születési dátum!" });
+  }
+
   const fullName = `${lastName} ${firstName}`;
+  const cleanCity = normalizeCity(city);
+  const cleanBirthDate = birthDate || null;
 
   db.query(
     "SELECT id FROM felhasznalok WHERE email = ?",
-    [email],
+    [String(email).trim()],
     async (err, results) => {
       if (err) {
         return res.status(500).json({ error: "DB hiba" });
@@ -1371,10 +1602,13 @@ app.post("/api/register", async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         db.query(
-          "INSERT INTO felhasznalok (nev, email, jelszo, profilkep, szerepkor) VALUES (?, ?, ?, NULL, 'user')",
-          [fullName, email, hashedPassword],
+          `INSERT INTO felhasznalok
+            (nev, email, varos, szuletesi_datum, jelszo, profilkep, szerepkor, aktiv)
+           VALUES (?, ?, ?, ?, ?, NULL, 'user', 1)`,
+          [fullName, String(email).trim(), cleanCity, cleanBirthDate, hashedPassword],
           (insertErr) => {
             if (insertErr) {
+              console.error("❌ REG INSERT HIBA:", insertErr.message);
               return res.status(500).json({ error: "Mentési hiba" });
             }
 
@@ -1426,6 +1660,9 @@ app.post("/api/login", (req, res) => {
             email: user.email,
             szerepkor: user.szerepkor,
             profilkep: user.profilkep,
+            varos: user.varos || "",
+            szuletesi_datum: user.szuletesi_datum || null,
+            eletkor: calculateAge(user.szuletesi_datum),
           },
         });
       } catch (compareErr) {
@@ -1438,7 +1675,7 @@ app.post("/api/login", (req, res) => {
 /* ===== PROFILE GET ===== */
 app.get("/api/profile", authMiddleware, (req, res) => {
   db.query(
-    "SELECT id, nev, email, szerepkor, profilkep FROM felhasznalok WHERE id = ?",
+    "SELECT id, nev, email, szerepkor, profilkep, varos, szuletesi_datum FROM felhasznalok WHERE id = ?",
     [req.user.id],
     (err, results) => {
       if (err) {
@@ -1449,7 +1686,12 @@ app.get("/api/profile", authMiddleware, (req, res) => {
         return res.status(404).json({ error: "Felhasználó nem található!" });
       }
 
-      res.json(results[0]);
+      const dbUser = results[0];
+
+      res.json({
+        ...dbUser,
+        eletkor: calculateAge(dbUser.szuletesi_datum),
+      });
     }
   );
 });
@@ -1568,7 +1810,16 @@ app.get(
   async (req, res) => {
     try {
       const [usersRows] = await dbPromise.query(
-        "SELECT id, nev, email, szerepkor, profilkep FROM felhasznalok ORDER BY id DESC"
+        `SELECT
+          id,
+          nev,
+          email,
+          szerepkor,
+          profilkep,
+          varos,
+          szuletesi_datum
+         FROM felhasznalok
+         ORDER BY id DESC`
       );
 
       const statsJoinSql = await getTourStatsJoinSql();
@@ -1598,19 +1849,65 @@ app.get(
 
       const rentalStats = await getRentalStatsSafe();
 
-      const users = usersRows || [];
+      const users = (usersRows || []).map((u) => ({
+        ...u,
+        varos: normalizeCity(u.varos),
+        eletkor: calculateAge(u.szuletesi_datum),
+      }));
+
       const tours = (tourRows || []).map(mapTourRow);
 
       const totalUsers = users.length;
       const adminCount = users.filter((u) => u.szerepkor === "admin").length;
-      const normalUserCount = users.filter(
-        (u) => u.szerepkor !== "admin"
-      ).length;
+      const normalUserCount = users.filter((u) => u.szerepkor !== "admin").length;
       const avatarCount = users.filter((u) => !!u.profilkep).length;
 
       const totalTours = tours.length;
       const activeTours = tours.filter((t) => t.active).length;
       const inactiveTours = tours.filter((t) => !t.active).length;
+
+      const usersWithCity = users.filter((u) => !!u.varos);
+      const usersWithAge = users.filter((u) => typeof u.eletkor === "number");
+
+      const cityMap = new Map();
+      for (const u of usersWithCity) {
+        const key = u.varos;
+        cityMap.set(key, (cityMap.get(key) || 0) + 1);
+      }
+
+      const cityStats = Array.from(cityMap.entries())
+        .map(([city, count]) => ({ city, count }))
+        .sort((a, b) => b.count - a.count || a.city.localeCompare(b.city, "hu"));
+
+      const ageGroupOrder = [
+        "18 év alatt",
+        "18-24",
+        "25-34",
+        "35-44",
+        "45-54",
+        "55+",
+      ];
+
+      const ageMap = new Map();
+      for (const u of usersWithAge) {
+        const group = getAgeGroup(u.eletkor);
+        if (!group) continue;
+        ageMap.set(group, (ageMap.get(group) || 0) + 1);
+      }
+
+      const ageGroups = ageGroupOrder
+        .filter((label) => ageMap.has(label))
+        .map((label) => ({
+          label,
+          count: ageMap.get(label) || 0,
+        }));
+
+      const ageValues = usersWithAge.map((u) => u.eletkor);
+      const averageAge = ageValues.length
+        ? Math.round(ageValues.reduce((sum, n) => sum + n, 0) / ageValues.length)
+        : 0;
+      const youngestAge = ageValues.length ? Math.min(...ageValues) : 0;
+      const oldestAge = ageValues.length ? Math.max(...ageValues) : 0;
 
       res.json({
         stats: {
@@ -1624,15 +1921,19 @@ app.get(
           totalRentalOrders: rentalStats.totalRentalOrders,
           pendingRentalOrders: rentalStats.pendingRentalOrders,
           totalRentalRevenue: rentalStats.totalRentalRevenue,
+          averageAge,
+          youngestAge,
+          oldestAge,
+          knownCityCount: usersWithCity.length,
         },
         users,
         tours,
+        cityStats,
+        ageGroups,
       });
     } catch (error) {
       console.error("❌ ADMIN DASHBOARD HIBA:", error.message);
-      res
-        .status(500)
-        .json({ error: "Nem sikerült betölteni az admin adatokat." });
+      res.status(500).json({ error: "Nem sikerült betölteni az admin adatokat." });
     }
   }
 );
@@ -1677,9 +1978,7 @@ app.put(
           [szerepkor, targetId],
           (updateErr) => {
             if (updateErr) {
-              return res
-                .status(500)
-                .json({ error: "Nem sikerült frissíteni a szerepkört!" });
+              return res.status(500).json({ error: "Nem sikerült frissíteni a szerepkört!" });
             }
 
             res.json({
@@ -1719,8 +2018,7 @@ app.post(
 
       if (!title || !desc || !category || !level || !dur) {
         return res.status(400).json({
-          error:
-            "A cím, leírás, kategória, nehézség és időtartam kötelező!",
+          error: "A cím, leírás, kategória, nehézség és időtartam kötelező!",
         });
       }
 
@@ -1795,9 +2093,7 @@ app.post(
 
       if (await columnExists("turak", "datum")) {
         insertColumns.push("datum");
-        insertValues.push(
-          isValidSqlDateString(date) ? date : getTodaySqlDate()
-        );
+        insertValues.push(isValidSqlDateString(date) ? date : getTodaySqlDate());
       }
 
       if (await columnExists("turak", "szervezo_id")) {
@@ -1808,9 +2104,7 @@ app.post(
       const placeholders = insertColumns.map(() => "?").join(", ");
 
       const [insertResult] = await dbPromise.query(
-        `INSERT INTO turak (${insertColumns.join(
-          ", "
-        )}) VALUES (${placeholders})`,
+        `INSERT INTO turak (${insertColumns.join(", ")}) VALUES (${placeholders})`,
         insertValues
       );
 

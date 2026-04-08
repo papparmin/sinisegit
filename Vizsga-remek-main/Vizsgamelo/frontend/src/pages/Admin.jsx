@@ -31,10 +31,18 @@ export default function Admin() {
     totalRentalOrders: 0,
     pendingRentalOrders: 0,
     totalRentalRevenue: 0,
+    averageAge: 0,
+    youngestAge: 0,
+    oldestAge: 0,
+    knownCityCount: 0,
   });
 
   const [users, setUsers] = useState([]);
   const [tours, setTours] = useState([]);
+  const [cityStats, setCityStats] = useState([]);
+  const [ageGroups, setAgeGroups] = useState([]);
+  const [contactMessages, setContactMessages] = useState([]);
+
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [loading, setLoading] = useState(true);
@@ -44,6 +52,10 @@ export default function Admin() {
   const [submittingTour, setSubmittingTour] = useState(false);
   const [tourForm, setTourForm] = useState(EMPTY_TOUR_FORM);
   const [message, setMessage] = useState({ text: "", type: "" });
+
+  const [replyDrafts, setReplyDrafts] = useState({});
+  const [savingReplyId, setSavingReplyId] = useState(null);
+  const [updatingMessageStatusId, setUpdatingMessageStatusId] = useState(null);
 
   const fetchDashboard = useCallback(
     async (withRefreshState = false) => {
@@ -58,15 +70,31 @@ export default function Admin() {
       setMessage({ text: "", type: "" });
 
       try {
-        const res = await axios.get(`${API_BASE}/api/admin/dashboard`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const [dashboardRes, contactRes] = await Promise.all([
+          axios.get(`${API_BASE}/api/admin/dashboard`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          axios.get(`${API_BASE}/api/admin/contact-messages`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
 
-        setStats(res.data.stats || {});
-        setUsers(res.data.users || []);
-        setTours(res.data.tours || []);
+        setStats(dashboardRes.data.stats || {});
+        setUsers(dashboardRes.data.users || []);
+        setTours(dashboardRes.data.tours || []);
+        setCityStats(dashboardRes.data.cityStats || []);
+        setAgeGroups(dashboardRes.data.ageGroups || []);
+        setContactMessages(contactRes.data || []);
+
+        setReplyDrafts((prev) => {
+          const next = { ...prev };
+          for (const row of contactRes.data || []) {
+            if (typeof next[row.id] === "undefined") {
+              next[row.id] = row.admin_valasz || "";
+            }
+          }
+          return next;
+        });
       } catch (err) {
         console.error(err);
         setMessage({
@@ -103,7 +131,9 @@ export default function Admin() {
         return (
           (u.nev || "").toLowerCase().includes(q) ||
           (u.email || "").toLowerCase().includes(q) ||
-          String(u.id).includes(q)
+          (u.varos || "").toLowerCase().includes(q) ||
+          String(u.id).includes(q) ||
+          String(u.eletkor || "").includes(q)
         );
       });
     }
@@ -121,11 +151,7 @@ export default function Admin() {
       const res = await axios.put(
         `${API_BASE}/api/admin/users/${targetUser.id}/role`,
         { szerepkor: nextRole },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
       setMessage({
@@ -167,9 +193,7 @@ export default function Admin() {
           price: Number(tourForm.price || 0),
         },
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
@@ -202,9 +226,7 @@ export default function Admin() {
         `${API_BASE}/api/admin/tours/${tour.id}/status`,
         { aktiv: !tour.active },
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         }
       );
 
@@ -225,6 +247,79 @@ export default function Admin() {
     }
   };
 
+  const handleReplyDraftChange = (id, value) => {
+    setReplyDrafts((prev) => ({
+      ...prev,
+      [id]: value,
+    }));
+  };
+
+  const handleSaveReply = async (contactId) => {
+    const adminValasz = String(replyDrafts[contactId] || "").trim();
+
+    if (!adminValasz) {
+      setMessage({
+        text: "Az admin válasz nem lehet üres.",
+        type: "error",
+      });
+      return;
+    }
+
+    setSavingReplyId(contactId);
+    setMessage({ text: "", type: "" });
+
+    try {
+      const res = await axios.put(
+        `${API_BASE}/api/admin/contact-messages/${contactId}/reply`,
+        { adminValasz },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setMessage({
+        text: res.data.message || "Válasz elmentve és elküldve.",
+        type: "success",
+      });
+
+      await fetchDashboard(true);
+    } catch (err) {
+      console.error(err);
+      setMessage({
+        text: err.response?.data?.error || "Nem sikerült elmenteni vagy elküldeni a választ.",
+        type: "error",
+      });
+    } finally {
+      setSavingReplyId(null);
+    }
+  };
+
+  const handleContactStatusChange = async (contactId, status) => {
+    setUpdatingMessageStatusId(contactId);
+    setMessage({ text: "", type: "" });
+
+    try {
+      const res = await axios.put(
+        `${API_BASE}/api/admin/contact-messages/${contactId}/status`,
+        { status },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setMessage({
+        text: res.data.message || "Státusz frissítve.",
+        type: "success",
+      });
+
+      await fetchDashboard(true);
+    } catch (err) {
+      console.error(err);
+      setMessage({
+        text: err.response?.data?.error || "Nem sikerült frissíteni a státuszt.",
+        type: "error",
+      });
+    } finally {
+      setUpdatingMessageStatusId(null);
+    }
+  };
+
   const getAvatar = (profilkep) => {
     if (!profilkep) return "";
     if (profilkep.startsWith("http")) return profilkep;
@@ -239,6 +334,20 @@ export default function Admin() {
   };
 
   const fmtFt = (n) => `${Number(n || 0).toLocaleString("hu-HU")} Ft`;
+
+  const formatBirthDate = (value) => {
+    if (!value) return "Nincs megadva";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "Nincs megadva";
+    return d.toLocaleDateString("hu-HU");
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return "—";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString("hu-HU");
+  };
 
   return (
     <main className="admin-page">
@@ -297,6 +406,32 @@ export default function Admin() {
           </div>
 
           <div className="admin-stat-card">
+            <div className="admin-stat-label">Ismert várossal</div>
+            <div className="admin-stat-value">{stats.knownCityCount || 0}</div>
+          </div>
+
+          <div className="admin-stat-card">
+            <div className="admin-stat-label">Átlagéletkor</div>
+            <div className="admin-stat-value">
+              {stats.averageAge ? `${stats.averageAge} év` : "-"}
+            </div>
+          </div>
+
+          <div className="admin-stat-card">
+            <div className="admin-stat-label">Legfiatalabb</div>
+            <div className="admin-stat-value">
+              {stats.youngestAge ? `${stats.youngestAge} év` : "-"}
+            </div>
+          </div>
+
+          <div className="admin-stat-card">
+            <div className="admin-stat-label">Legidősebb</div>
+            <div className="admin-stat-value">
+              {stats.oldestAge ? `${stats.oldestAge} év` : "-"}
+            </div>
+          </div>
+
+          <div className="admin-stat-card">
             <div className="admin-stat-label">Összes túra</div>
             <div className="admin-stat-value">{stats.totalTours || 0}</div>
           </div>
@@ -327,10 +462,183 @@ export default function Admin() {
           </div>
         </section>
 
-        <section
-          className="admin-users-section"
-          style={{ marginBottom: 28 }}
-        >
+        <section className="admin-users-section" style={{ marginBottom: 28 }}>
+          <div className="admin-section-head">
+            <h2>Kapcsolati üzenetek</h2>
+            <span>{contactMessages.length} db</span>
+          </div>
+
+          {loading ? (
+            <div className="admin-empty">Betöltés...</div>
+          ) : contactMessages.length === 0 ? (
+            <div className="admin-empty">Még nincs egyetlen üzenet sem.</div>
+          ) : (
+            <div className="admin-users-grid">
+              {contactMessages.map((row) => (
+                <article className="admin-user-card" key={row.id}>
+                  <div className="admin-user-main" style={{ paddingLeft: 0 }}>
+                    <div className="admin-user-name-row">
+                      <h3>{row.nev || "Ismeretlen"}</h3>
+                      <span
+                        className={`role-badge ${
+                          row.status === "megvalaszolva" ? "admin" : "user"
+                        }`}
+                      >
+                        {row.status}
+                      </span>
+                    </div>
+
+                    <p>{row.email}</p>
+                    <small>ID: {row.id}</small>
+                    <br />
+                    <small>Tárgy: {row.targy || "Nincs megadva"}</small>
+                    <br />
+                    <small>Beérkezett: {formatDateTime(row.letrehozva)}</small>
+                    <br />
+                    <small>Válaszolt admin: {row.admin_nev || "Még nincs"}</small>
+                    <br />
+                    <small>Válasz ideje: {formatDateTime(row.valaszolva_ekkor)}</small>
+
+                    <div
+                      style={{
+                        marginTop: 12,
+                        padding: "12px 14px",
+                        borderRadius: 14,
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        color: "rgba(255,255,255,0.88)",
+                        lineHeight: 1.5,
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {row.uzenet}
+                    </div>
+
+                    <div style={{ marginTop: 14 }}>
+                      <label
+                        style={{
+                          display: "block",
+                          marginBottom: 8,
+                          fontSize: 13,
+                          opacity: 0.75,
+                        }}
+                      >
+                        Admin válasz
+                      </label>
+
+                      <textarea
+                        rows={5}
+                        value={replyDrafts[row.id] || ""}
+                        onChange={(e) => handleReplyDraftChange(row.id, e.target.value)}
+                        placeholder="Ide írhatod az admin választ..."
+                        style={{
+                          width: "100%",
+                          resize: "vertical",
+                          borderRadius: 14,
+                          padding: 12,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: "rgba(255,255,255,0.05)",
+                          color: "#fff",
+                          outline: "none",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    className="admin-user-actions"
+                    style={{ marginTop: 16, display: "grid", gap: 10 }}
+                  >
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="make-admin"
+                        onClick={() => handleContactStatusChange(row.id, "folyamatban")}
+                        disabled={updatingMessageStatusId === row.id}
+                      >
+                        Folyamatban
+                      </button>
+
+                      <button
+                        type="button"
+                        className="make-user"
+                        onClick={() => handleContactStatusChange(row.id, "lezarva")}
+                        disabled={updatingMessageStatusId === row.id}
+                      >
+                        Lezárás
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="admin-refresh-btn"
+                      onClick={() => handleSaveReply(row.id)}
+                      disabled={savingReplyId === row.id}
+                    >
+                      {savingReplyId === row.id ? "Küldés..." : "Válasz mentése és küldése"}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="admin-users-section" style={{ marginBottom: 28 }}>
+          <div className="admin-section-head">
+            <h2>Felhasználók város szerint</h2>
+            <span>{cityStats.length} város</span>
+          </div>
+
+          {loading ? (
+            <div className="admin-empty">Betöltés...</div>
+          ) : cityStats.length === 0 ? (
+            <div className="admin-empty">Még nincs város adat.</div>
+          ) : (
+            <div className="admin-users-grid">
+              {cityStats.map((city) => (
+                <article className="admin-user-card" key={city.city}>
+                  <div className="admin-user-main" style={{ paddingLeft: 0 }}>
+                    <div className="admin-user-name-row">
+                      <h3>{city.city}</h3>
+                      <span className="role-badge user">{city.count} fő</span>
+                    </div>
+                    <p>Regisztrált felhasználók ebből a városból.</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="admin-users-section" style={{ marginBottom: 28 }}>
+          <div className="admin-section-head">
+            <h2>Korosztály szerinti bontás</h2>
+            <span>{ageGroups.length} csoport</span>
+          </div>
+
+          {loading ? (
+            <div className="admin-empty">Betöltés...</div>
+          ) : ageGroups.length === 0 ? (
+            <div className="admin-empty">Még nincs születési dátum adat.</div>
+          ) : (
+            <div className="admin-users-grid">
+              {ageGroups.map((group) => (
+                <article className="admin-user-card" key={group.label}>
+                  <div className="admin-user-main" style={{ paddingLeft: 0 }}>
+                    <div className="admin-user-name-row">
+                      <h3>{group.label}</h3>
+                      <span className="role-badge admin">{group.count} fő</span>
+                    </div>
+                    <p>Felhasználók ebben a korcsoportban.</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="admin-users-section" style={{ marginBottom: 28 }}>
           <div className="admin-section-head">
             <h2>Új túra létrehozása</h2>
             <span>Adminból azonnal publikálható</span>
@@ -338,10 +646,7 @@ export default function Admin() {
 
           <form
             onSubmit={handleCreateTour}
-            style={{
-              display: "grid",
-              gap: 14,
-            }}
+            style={{ display: "grid", gap: 14 }}
           >
             <div
               style={{
@@ -402,7 +707,6 @@ export default function Admin() {
               value={tourForm.img}
               onChange={handleTourChange}
             />
-
             <input
               type="text"
               name="shortDesc"
@@ -410,7 +714,6 @@ export default function Admin() {
               value={tourForm.shortDesc}
               onChange={handleTourChange}
             />
-
             <textarea
               name="desc"
               placeholder="Teljes leírás"
@@ -435,7 +738,7 @@ export default function Admin() {
           <div className="admin-search-wrap">
             <input
               type="text"
-              placeholder="Keresés név, email vagy ID alapján..."
+              placeholder="Keresés név, email, város, életkor vagy ID alapján..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -449,7 +752,6 @@ export default function Admin() {
             >
               Összes
             </button>
-
             <button
               type="button"
               className={roleFilter === "admin" ? "active" : ""}
@@ -457,7 +759,6 @@ export default function Admin() {
             >
               Adminok
             </button>
-
             <button
               type="button"
               className={roleFilter === "user" ? "active" : ""}
@@ -508,6 +809,14 @@ export default function Admin() {
 
                         <p>{u.email}</p>
                         <small>ID: {u.id}</small>
+                        <br />
+                        <small>Város: {u.varos || "Nincs megadva"}</small>
+                        <br />
+                        <small>
+                          Életkor: {u.eletkor ? `${u.eletkor} év` : "Nincs megadva"}
+                        </small>
+                        <br />
+                        <small>Születési dátum: {formatBirthDate(u.szuletesi_datum)}</small>
                       </div>
                     </div>
 
@@ -581,16 +890,12 @@ export default function Admin() {
                     <div className="admin-user-main" style={{ paddingLeft: 0 }}>
                       <div className="admin-user-name-row">
                         <h3>{tour.title}</h3>
-                        <span
-                          className={`role-badge ${tour.active ? "admin" : "user"}`}
-                        >
+                        <span className={`role-badge ${tour.active ? "admin" : "user"}`}>
                           {tour.active ? "látható" : "rejtett"}
                         </span>
                       </div>
 
-                      <p style={{ marginBottom: 8 }}>
-                        {tour.shortDesc || tour.desc}
-                      </p>
+                      <p style={{ marginBottom: 8 }}>{tour.shortDesc || tour.desc}</p>
 
                       <small>
                         {tour.category} • {tour.level} • {tour.dur}
