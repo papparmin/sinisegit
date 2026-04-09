@@ -13,8 +13,8 @@ const fs = require("fs");
 const app = express();
 
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 /* =====================================
    UPLOADS FOLDER
@@ -31,19 +31,22 @@ app.use("/uploads", express.static(UPLOAD_DIR));
    DATABASE
 ===================================== */
 const db = mysql.createPool({
-  host: process.env.DB_HOST || "localhost",
+  host: process.env.DB_HOST || "127.0.0.1",
+  port: Number(process.env.DB_PORT || 3306),
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
   database: process.env.DB_DATABASE || "exploree",
   waitForConnections: true,
   connectionLimit: 10,
+  charset: "utf8mb4",
 });
 
 const dbPromise = db.promise();
 
 db.getConnection((err, connection) => {
   if (err) {
-    console.error("❌ DB hiba:", err.message);
+    console.error("❌ DB kapcsolat hiba:");
+    console.error(err);
   } else {
     console.log("✅ DB connected");
     connection.release();
@@ -63,11 +66,14 @@ const mailTransporter = nodemailer.createTransport({
   },
 });
 
-async function sendContactReplyEmail({ toEmail, toName, subject, adminReply }) {
-  console.log("MAIL USER:", process.env.MAIL_USER);
-  console.log("MAIL PASS EXISTS:", !!process.env.MAIL_PASS);
-  console.log("MAIL TO:", toEmail);
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
+async function sendContactReplyEmail({ toEmail, toName, subject, adminReply }) {
   if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
     throw new Error("A levélküldéshez hiányzik a MAIL_USER vagy MAIL_PASS.");
   }
@@ -96,14 +102,15 @@ ${fromName}
 ${process.env.MAIL_USER}`,
     html: `
       <div style="font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #111;">
-        <p>Szia ${safeName}!</p>
+        <p>Szia ${escapeHtml(safeName)}!</p>
         <p>Köszönjük, hogy írtál nekünk.</p>
         <p>Az üzenetedre az alábbi választ küldjük:</p>
-        <div style="padding: 14px 16px; background: #f5f7f8; border: 1px solid #dfe5e8; border-radius: 10px; white-space: pre-wrap;">${safeReply
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")}</div>
-        <p style="margin-top: 18px;">Üdv,<br/><strong>${fromName}</strong></p>
+        <div style="padding: 14px 16px; background: #f5f7f8; border: 1px solid #dfe5e8; border-radius: 10px; white-space: pre-wrap;">${escapeHtml(
+          safeReply
+        )}</div>
+        <p style="margin-top: 18px;">Üdv,<br/><strong>${escapeHtml(
+          fromName
+        )}</strong></p>
       </div>
     `,
   });
@@ -136,26 +143,26 @@ function authMiddleware(req, res, next) {
   }
 }
 
-function adminMiddleware(req, res, next) {
-  db.query(
-    "SELECT id, szerepkor FROM felhasznalok WHERE id = ? LIMIT 1",
-    [req.user.id],
-    (err, results) => {
-      if (err) {
-        return res.status(500).json({ error: "DB hiba" });
-      }
+async function adminMiddleware(req, res, next) {
+  try {
+    const [rows] = await dbPromise.query(
+      "SELECT id, szerepkor FROM felhasznalok WHERE id = ? LIMIT 1",
+      [req.user.id]
+    );
 
-      if (!results.length) {
-        return res.status(404).json({ error: "Felhasználó nem található!" });
-      }
-
-      if (results[0].szerepkor !== "admin") {
-        return res.status(403).json({ error: "Nincs admin jogosultságod!" });
-      }
-
-      next();
+    if (!rows.length) {
+      return res.status(404).json({ error: "Felhasználó nem található!" });
     }
-  );
+
+    if (rows[0].szerepkor !== "admin") {
+      return res.status(403).json({ error: "Nincs admin jogosultságod!" });
+    }
+
+    next();
+  } catch (error) {
+    console.error("❌ ADMIN MIDDLEWARE HIBA:", error.message);
+    return res.status(500).json({ error: "DB hiba" });
+  }
 }
 
 /* =====================================
@@ -193,6 +200,7 @@ function slugify(text = "") {
 function isValidSqlDateString(value) {
   if (!value || typeof value !== "string") return false;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+
   const d = new Date(`${value}T00:00:00`);
   return !Number.isNaN(d.getTime());
 }
@@ -236,53 +244,20 @@ function normalizeCity(value) {
   return city || "";
 }
 
-async function createUniqueTourSlug(baseText) {
-  const baseSlug = slugify(baseText) || `tura-${Date.now()}`;
-  let candidate = baseSlug;
-  let index = 2;
-
-  while (true) {
-    const [rows] = await dbPromise.query(
-      "SELECT id FROM turak WHERE slug = ? LIMIT 1",
-      [candidate]
-    );
-
-    if (!rows.length) {
-      return candidate;
-    }
-
-    candidate = `${baseSlug}-${index}`;
-    index += 1;
-  }
+function setHas(setObj, key) {
+  return !!setObj && setObj.has(key);
 }
 
-function mapTourRow(row) {
-  const maxPeople = Number(row.letszam_max || 20);
-  const joinedCount = Number(row.joined_count || 0);
-  const remainingPlaces = Math.max(0, maxPeople - joinedCount);
+function pickExistingColumn(columns, names = []) {
+  for (const name of names) {
+    if (setHas(columns, name)) return name;
+  }
+  return null;
+}
 
-  return {
-    id: row.id,
-    slug: row.slug || `tura-${row.id}`,
-    title: row.cim || row.nev || `Túra #${row.id}`,
-    shortDesc: row.rovid_leiras || "",
-    desc: row.leiras || "",
-    category: row.kategoria || row.helyszin || "Általános",
-    level: row.nehezseg || "Kezdő",
-    dur: row.idotartam || "1 Nap",
-    badge: row.badge || "EXPLORE",
-    price: Number(row.ar || 0),
-    img:
-      row.kep ||
-      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1400",
-    maxPeople,
-    joinedCount,
-    remainingPlaces,
-    soldOut: remainingPlaces <= 0,
-    active: typeof row.aktiv === "undefined" ? true : !!row.aktiv,
-    createdAt: row.created_at || null,
-    updatedAt: row.updated_at || null,
-  };
+function nullSafeExpr(expr, fallbackSqlLiteral) {
+  if (!expr) return fallbackSqlLiteral;
+  return `COALESCE(NULLIF(${expr}, ''), ${fallbackSqlLiteral})`;
 }
 
 async function tableExists(tableName) {
@@ -311,8 +286,20 @@ async function getTableColumnsSet(tableName) {
   return new Set(rows.map((row) => row.Field));
 }
 
-function setHas(setObj, key) {
-  return !!setObj && setObj.has(key);
+async function addColumnIfMissing(tableName, columnName, sqlTypeAndOptions) {
+  const exists = await columnExists(tableName, columnName);
+  if (!exists) {
+    await dbPromise.query(
+      `ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${sqlTypeAndOptions}`
+    );
+  }
+}
+
+async function addIndexIfMissing(tableName, indexName, indexSql) {
+  const exists = await indexExists(tableName, indexName);
+  if (!exists) {
+    await dbPromise.query(indexSql);
+  }
 }
 
 function getFoglalasTourIdExpr(columns) {
@@ -367,6 +354,158 @@ async function getTourStatsJoinSql() {
   `;
 }
 
+async function createUniqueTourSlug(baseText) {
+  const baseSlug = slugify(baseText) || `tura-${Date.now()}`;
+  let candidate = baseSlug;
+  let index = 2;
+
+  while (true) {
+    const [rows] = await dbPromise.query(
+      "SELECT id FROM turak WHERE slug = ? LIMIT 1",
+      [candidate]
+    );
+
+    if (!rows.length) return candidate;
+
+    candidate = `${baseSlug}-${index}`;
+    index += 1;
+  }
+}
+
+function mapTourRow(row) {
+  const maxPeople = Number(row.letszam_max || 20);
+  const joinedCount = Number(row.joined_count || 0);
+  const remainingPlaces = Math.max(0, maxPeople - joinedCount);
+
+  return {
+    id: row.id,
+    slug: row.slug || `tura-${row.id}`,
+    title: row.cim || row.nev || `Túra #${row.id}`,
+    shortDesc: row.rovid_leiras || "",
+    desc: row.leiras || "",
+    category: row.kategoria || row.helyszin || "Általános",
+    level: row.nehezseg || "Kezdő",
+    dur: row.idotartam || "1 Nap",
+    badge: row.badge || "EXPLORE",
+    price: Number(row.ar || 0),
+    img:
+      row.kep ||
+      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1400",
+    maxPeople,
+    joinedCount,
+    remainingPlaces,
+    soldOut: remainingPlaces <= 0,
+    active: typeof row.aktiv === "undefined" ? true : !!row.aktiv,
+    createdAt: row.created_at || row.letrehozva || null,
+    updatedAt: row.updated_at || null,
+  };
+}
+
+function mapRentalRow(row) {
+  return {
+    id: row.id,
+    nev: row.nev || "Termék",
+    kategoria: row.kategoria || "Egyéb",
+    marka: row.marka || "EXPLORE",
+    ar_per_nap: Number(row.ar_per_nap || 0),
+    ertekeles:
+      row.ertekeles === null || typeof row.ertekeles === "undefined"
+        ? null
+        : Number(row.ertekeles),
+    suly_kg:
+      row.suly_kg === null || typeof row.suly_kg === "undefined"
+        ? null
+        : Number(row.suly_kg),
+    kep:
+      row.kep ||
+      "https://images.unsplash.com/photo-1522163182402-834f871fd851?w=1400",
+    leiras: row.leiras || "",
+    darabszam: Number(row.darabszam || 0),
+    aktiv: !!row.aktiv,
+  };
+}
+
+/* =====================================
+   SCHEMA / TABLE FIXERS
+===================================== */
+async function ensureFelhasznalokTableShape() {
+  await dbPromise.query(`
+    CREATE TABLE IF NOT EXISTS felhasznalok (
+      id INT NOT NULL AUTO_INCREMENT,
+      nev VARCHAR(100) NOT NULL,
+      email VARCHAR(150) NOT NULL,
+      jelszo VARCHAR(255) NOT NULL,
+      szerepkor ENUM('user','admin') DEFAULT 'user',
+      aktiv TINYINT(1) DEFAULT 1,
+      profilkep VARCHAR(500) DEFAULT NULL,
+      varos VARCHAR(255) DEFAULT NULL,
+      szuletesi_datum DATE DEFAULT NULL,
+      letrehozva TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_felhasznalok_email (email)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+
+  await addColumnIfMissing("felhasznalok", "profilkep", "VARCHAR(500) NULL");
+  await addColumnIfMissing("felhasznalok", "varos", "VARCHAR(255) NULL");
+  await addColumnIfMissing("felhasznalok", "szuletesi_datum", "DATE NULL");
+  await addColumnIfMissing("felhasznalok", "nem", "VARCHAR(50) NULL");
+  await addColumnIfMissing(
+    "felhasznalok",
+    "updated_at",
+    "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+  );
+
+  await addIndexIfMissing(
+    "felhasznalok",
+    "uq_felhasznalok_email",
+    "ALTER TABLE felhasznalok ADD UNIQUE KEY uq_felhasznalok_email (email)"
+  );
+}
+
+async function ensureKapcsolatUzenetekTableShape() {
+  await dbPromise.query(`
+    CREATE TABLE IF NOT EXISTS kapcsolat_uzenetek (
+      id INT NOT NULL AUTO_INCREMENT,
+      user_id INT NULL,
+      nev VARCHAR(255) NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      targy VARCHAR(255) DEFAULT NULL,
+      uzenet TEXT NOT NULL,
+      status VARCHAR(50) NOT NULL DEFAULT 'uj',
+      admin_valasz TEXT DEFAULT NULL,
+      admin_id INT NULL,
+      valaszolva_ekkor DATETIME DEFAULT NULL,
+      letrehozva TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+
+  await addColumnIfMissing("kapcsolat_uzenetek", "user_id", "INT NULL");
+  await addColumnIfMissing("kapcsolat_uzenetek", "nev", "VARCHAR(255) NULL");
+  await addColumnIfMissing("kapcsolat_uzenetek", "email", "VARCHAR(255) NULL");
+  await addColumnIfMissing("kapcsolat_uzenetek", "targy", "VARCHAR(255) NULL");
+  await addColumnIfMissing("kapcsolat_uzenetek", "uzenet", "TEXT NULL");
+  await addColumnIfMissing(
+    "kapcsolat_uzenetek",
+    "status",
+    "VARCHAR(50) NOT NULL DEFAULT 'uj'"
+  );
+  await addColumnIfMissing("kapcsolat_uzenetek", "admin_valasz", "TEXT NULL");
+  await addColumnIfMissing("kapcsolat_uzenetek", "admin_id", "INT NULL");
+  await addColumnIfMissing(
+    "kapcsolat_uzenetek",
+    "valaszolva_ekkor",
+    "DATETIME NULL"
+  );
+  await addColumnIfMissing(
+    "kapcsolat_uzenetek",
+    "letrehozva",
+    "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"
+  );
+}
+
 async function ensureTurakTableShape() {
   await dbPromise.query(`
     CREATE TABLE IF NOT EXISTS turak (
@@ -390,57 +529,28 @@ async function ensureTurakTableShape() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
 
-  const missingColumns = [
-    { name: "slug", sql: "ALTER TABLE turak ADD COLUMN slug VARCHAR(180) NULL AFTER id" },
-    { name: "cim", sql: "ALTER TABLE turak ADD COLUMN cim VARCHAR(255) NULL AFTER slug" },
-    {
-      name: "rovid_leiras",
-      sql: "ALTER TABLE turak ADD COLUMN rovid_leiras VARCHAR(255) NULL AFTER cim",
-    },
-    {
-      name: "kategoria",
-      sql: "ALTER TABLE turak ADD COLUMN kategoria VARCHAR(100) NULL AFTER leiras",
-    },
-    {
-      name: "nehezseg",
-      sql: "ALTER TABLE turak ADD COLUMN nehezseg VARCHAR(100) NULL AFTER kategoria",
-    },
-    {
-      name: "idotartam",
-      sql: "ALTER TABLE turak ADD COLUMN idotartam VARCHAR(100) NULL AFTER nehezseg",
-    },
-    {
-      name: "badge",
-      sql: "ALTER TABLE turak ADD COLUMN badge VARCHAR(120) NULL AFTER idotartam",
-    },
-    {
-      name: "kep",
-      sql: "ALTER TABLE turak ADD COLUMN kep VARCHAR(2000) NULL AFTER ar",
-    },
-    {
-      name: "letszam_max",
-      sql: "ALTER TABLE turak ADD COLUMN letszam_max INT NOT NULL DEFAULT 20 AFTER kep",
-    },
-    {
-      name: "aktiv",
-      sql: "ALTER TABLE turak ADD COLUMN aktiv TINYINT(1) NOT NULL DEFAULT 1 AFTER letszam_max",
-    },
-    {
-      name: "created_at",
-      sql: "ALTER TABLE turak ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER aktiv",
-    },
-    {
-      name: "updated_at",
-      sql: "ALTER TABLE turak ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at",
-    },
-  ];
-
-  for (const column of missingColumns) {
-    const exists = await columnExists("turak", column.name);
-    if (!exists) {
-      await dbPromise.query(column.sql);
-    }
-  }
+  await addColumnIfMissing("turak", "slug", "VARCHAR(180) NULL");
+  await addColumnIfMissing("turak", "cim", "VARCHAR(255) NULL");
+  await addColumnIfMissing("turak", "rovid_leiras", "VARCHAR(255) NULL");
+  await addColumnIfMissing("turak", "leiras", "TEXT NULL");
+  await addColumnIfMissing("turak", "kategoria", "VARCHAR(100) NULL");
+  await addColumnIfMissing("turak", "nehezseg", "VARCHAR(100) NULL");
+  await addColumnIfMissing("turak", "idotartam", "VARCHAR(100) NULL");
+  await addColumnIfMissing("turak", "badge", "VARCHAR(120) NULL");
+  await addColumnIfMissing("turak", "ar", "INT NOT NULL DEFAULT 0");
+  await addColumnIfMissing("turak", "kep", "VARCHAR(2000) NULL");
+  await addColumnIfMissing("turak", "letszam_max", "INT NOT NULL DEFAULT 20");
+  await addColumnIfMissing("turak", "aktiv", "TINYINT(1) NOT NULL DEFAULT 1");
+  await addColumnIfMissing(
+    "turak",
+    "created_at",
+    "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"
+  );
+  await addColumnIfMissing(
+    "turak",
+    "updated_at",
+    "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+  );
 
   const hasOldNev = await columnExists("turak", "nev");
   const hasOldHelyszin = await columnExists("turak", "helyszin");
@@ -471,19 +581,11 @@ async function ensureTurakTableShape() {
       aktiv = COALESCE(aktiv, 1)
   `);
 
-  const kepExists = await columnExists("turak", "kep");
-  if (kepExists) {
-    try {
-      await dbPromise.query("ALTER TABLE turak MODIFY COLUMN kep VARCHAR(2000) NULL");
-    } catch (error) {
-      console.error("❌ kep oszlop módosítás hiba:", error.message);
-    }
-  }
-
-  const slugIndexExists = await indexExists("turak", "uq_turak_slug");
-  if (!slugIndexExists) {
-    await dbPromise.query("ALTER TABLE turak ADD UNIQUE KEY uq_turak_slug (slug)");
-  }
+  await addIndexIfMissing(
+    "turak",
+    "uq_turak_slug",
+    "ALTER TABLE turak ADD UNIQUE KEY uq_turak_slug (slug)"
+  );
 }
 
 async function ensureFoglalasokTableShape() {
@@ -491,20 +593,37 @@ async function ensureFoglalasokTableShape() {
     CREATE TABLE IF NOT EXISTS foglalasok (
       id INT NOT NULL AUTO_INCREMENT,
       felhasznalo_id INT NULL,
+      user_id INT NULL,
       tura_id INT NULL,
+      tour_id INT NULL,
       tura_slug VARCHAR(180) DEFAULT NULL,
+      tour_slug VARCHAR(180) DEFAULT NULL,
       tura_cim VARCHAR(255) DEFAULT NULL,
+      tour_title VARCHAR(255) DEFAULT NULL,
       datum DATE DEFAULT NULL,
+      date DATE DEFAULT NULL,
       letszam INT NOT NULL DEFAULT 1,
+      people INT NOT NULL DEFAULT 1,
+      nev VARCHAR(255) DEFAULT NULL,
       foglalo_nev VARCHAR(255) DEFAULT NULL,
+      name VARCHAR(255) DEFAULT NULL,
       foglalo_email VARCHAR(255) DEFAULT NULL,
+      email VARCHAR(255) DEFAULT NULL,
+      telefon VARCHAR(60) DEFAULT NULL,
       foglalo_telefon VARCHAR(60) DEFAULT NULL,
+      phone VARCHAR(60) DEFAULT NULL,
       tapasztalat VARCHAR(100) DEFAULT 'Kezdő',
+      experience VARCHAR(100) DEFAULT 'Kezdő',
       egeszseg TEXT DEFAULT NULL,
+      health TEXT DEFAULT NULL,
       veszhelyzeti_nev VARCHAR(255) DEFAULT NULL,
+      emergency_name VARCHAR(255) DEFAULT NULL,
       veszhelyzeti_telefon VARCHAR(60) DEFAULT NULL,
+      emergency_phone VARCHAR(60) DEFAULT NULL,
       felszereles_berles VARCHAR(50) DEFAULT 'Nem',
+      rental VARCHAR(50) DEFAULT 'Nem',
       megjegyzes TEXT DEFAULT NULL,
+      note TEXT DEFAULT NULL,
       status VARCHAR(50) NOT NULL DEFAULT 'uj',
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -512,130 +631,76 @@ async function ensureFoglalasokTableShape() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
 
-  const missingColumns = [
-    { name: "felhasznalo_id", sql: "ALTER TABLE foglalasok ADD COLUMN felhasznalo_id INT NULL AFTER id" },
-    { name: "user_id", sql: "ALTER TABLE foglalasok ADD COLUMN user_id INT NULL AFTER felhasznalo_id" },
-    { name: "tura_id", sql: "ALTER TABLE foglalasok ADD COLUMN tura_id INT NULL AFTER user_id" },
-    { name: "tour_id", sql: "ALTER TABLE foglalasok ADD COLUMN tour_id INT NULL AFTER tura_id" },
-    {
-      name: "tura_slug",
-      sql: "ALTER TABLE foglalasok ADD COLUMN tura_slug VARCHAR(180) NULL AFTER tour_id",
-    },
-    {
-      name: "tour_slug",
-      sql: "ALTER TABLE foglalasok ADD COLUMN tour_slug VARCHAR(180) NULL AFTER tura_slug",
-    },
-    {
-      name: "tura_cim",
-      sql: "ALTER TABLE foglalasok ADD COLUMN tura_cim VARCHAR(255) NULL AFTER tour_slug",
-    },
-    {
-      name: "tour_title",
-      sql: "ALTER TABLE foglalasok ADD COLUMN tour_title VARCHAR(255) NULL AFTER tura_cim",
-    },
-    { name: "datum", sql: "ALTER TABLE foglalasok ADD COLUMN datum DATE NULL AFTER tour_title" },
-    { name: "date", sql: "ALTER TABLE foglalasok ADD COLUMN date DATE NULL AFTER datum" },
-    { name: "letszam", sql: "ALTER TABLE foglalasok ADD COLUMN letszam INT NOT NULL DEFAULT 1 AFTER date" },
-    { name: "people", sql: "ALTER TABLE foglalasok ADD COLUMN people INT NOT NULL DEFAULT 1 AFTER letszam" },
-    { name: "nev", sql: "ALTER TABLE foglalasok ADD COLUMN nev VARCHAR(255) NULL AFTER people" },
-    {
-      name: "foglalo_nev",
-      sql: "ALTER TABLE foglalasok ADD COLUMN foglalo_nev VARCHAR(255) NULL AFTER nev",
-    },
-    { name: "name", sql: "ALTER TABLE foglalasok ADD COLUMN name VARCHAR(255) NULL AFTER foglalo_nev" },
-    {
-      name: "foglalo_email",
-      sql: "ALTER TABLE foglalasok ADD COLUMN foglalo_email VARCHAR(255) NULL AFTER name",
-    },
-    { name: "email", sql: "ALTER TABLE foglalasok ADD COLUMN email VARCHAR(255) NULL AFTER foglalo_email" },
-    { name: "telefon", sql: "ALTER TABLE foglalasok ADD COLUMN telefon VARCHAR(60) NULL AFTER email" },
-    {
-      name: "foglalo_telefon",
-      sql: "ALTER TABLE foglalasok ADD COLUMN foglalo_telefon VARCHAR(60) NULL AFTER telefon",
-    },
-    { name: "phone", sql: "ALTER TABLE foglalasok ADD COLUMN phone VARCHAR(60) NULL AFTER foglalo_telefon" },
-    {
-      name: "tapasztalat",
-      sql: "ALTER TABLE foglalasok ADD COLUMN tapasztalat VARCHAR(100) DEFAULT 'Kezdő' AFTER phone",
-    },
-    {
-      name: "experience",
-      sql: "ALTER TABLE foglalasok ADD COLUMN experience VARCHAR(100) DEFAULT 'Kezdő' AFTER tapasztalat",
-    },
-    { name: "egeszseg", sql: "ALTER TABLE foglalasok ADD COLUMN egeszseg TEXT NULL AFTER experience" },
-    { name: "health", sql: "ALTER TABLE foglalasok ADD COLUMN health TEXT NULL AFTER egeszseg" },
-    {
-      name: "veszhelyzeti_nev",
-      sql: "ALTER TABLE foglalasok ADD COLUMN veszhelyzeti_nev VARCHAR(255) NULL AFTER health",
-    },
-    {
-      name: "emergency_name",
-      sql: "ALTER TABLE foglalasok ADD COLUMN emergency_name VARCHAR(255) NULL AFTER veszhelyzeti_nev",
-    },
-    {
-      name: "veszhelyzeti_telefon",
-      sql: "ALTER TABLE foglalasok ADD COLUMN veszhelyzeti_telefon VARCHAR(60) NULL AFTER emergency_name",
-    },
-    {
-      name: "emergency_phone",
-      sql: "ALTER TABLE foglalasok ADD COLUMN emergency_phone VARCHAR(60) NULL AFTER veszhelyzeti_telefon",
-    },
-    {
-      name: "felszereles_berles",
-      sql: "ALTER TABLE foglalasok ADD COLUMN felszereles_berles VARCHAR(50) DEFAULT 'Nem' AFTER emergency_phone",
-    },
-    {
-      name: "rental",
-      sql: "ALTER TABLE foglalasok ADD COLUMN rental VARCHAR(50) DEFAULT 'Nem' AFTER felszereles_berles",
-    },
-    {
-      name: "megjegyzes",
-      sql: "ALTER TABLE foglalasok ADD COLUMN megjegyzes TEXT NULL AFTER rental",
-    },
-    { name: "note", sql: "ALTER TABLE foglalasok ADD COLUMN note TEXT NULL AFTER megjegyzes" },
-    {
-      name: "status",
-      sql: "ALTER TABLE foglalasok ADD COLUMN status VARCHAR(50) NOT NULL DEFAULT 'uj' AFTER note",
-    },
-    {
-      name: "created_at",
-      sql: "ALTER TABLE foglalasok ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER status",
-    },
-    {
-      name: "updated_at",
-      sql: "ALTER TABLE foglalasok ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at",
-    },
+  const cols = [
+    ["felhasznalo_id", "INT NULL"],
+    ["user_id", "INT NULL"],
+    ["tura_id", "INT NULL"],
+    ["tour_id", "INT NULL"],
+    ["tura_slug", "VARCHAR(180) NULL"],
+    ["tour_slug", "VARCHAR(180) NULL"],
+    ["tura_cim", "VARCHAR(255) NULL"],
+    ["tour_title", "VARCHAR(255) NULL"],
+    ["datum", "DATE NULL"],
+    ["date", "DATE NULL"],
+    ["letszam", "INT NOT NULL DEFAULT 1"],
+    ["people", "INT NOT NULL DEFAULT 1"],
+    ["nev", "VARCHAR(255) NULL"],
+    ["foglalo_nev", "VARCHAR(255) NULL"],
+    ["name", "VARCHAR(255) NULL"],
+    ["foglalo_email", "VARCHAR(255) NULL"],
+    ["email", "VARCHAR(255) NULL"],
+    ["telefon", "VARCHAR(60) NULL"],
+    ["foglalo_telefon", "VARCHAR(60) NULL"],
+    ["phone", "VARCHAR(60) NULL"],
+    ["tapasztalat", "VARCHAR(100) DEFAULT 'Kezdő'"],
+    ["experience", "VARCHAR(100) DEFAULT 'Kezdő'"],
+    ["egeszseg", "TEXT NULL"],
+    ["health", "TEXT NULL"],
+    ["veszhelyzeti_nev", "VARCHAR(255) NULL"],
+    ["emergency_name", "VARCHAR(255) NULL"],
+    ["veszhelyzeti_telefon", "VARCHAR(60) NULL"],
+    ["emergency_phone", "VARCHAR(60) NULL"],
+    ["felszereles_berles", "VARCHAR(50) DEFAULT 'Nem'"],
+    ["rental", "VARCHAR(50) DEFAULT 'Nem'"],
+    ["megjegyzes", "TEXT NULL"],
+    ["note", "TEXT NULL"],
+    ["status", "VARCHAR(50) NOT NULL DEFAULT 'uj'"],
+    ["created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"],
+    [
+      "updated_at",
+      "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+    ],
   ];
 
-  for (const column of missingColumns) {
-    const exists = await columnExists("foglalasok", column.name);
-    if (!exists) {
-      try {
-        await dbPromise.query(column.sql);
-      } catch (error) {
-        console.error(`❌ foglalasok.${column.name} hozzáadás hiba:`, error.message);
-      }
-    }
+  for (const [name, sql] of cols) {
+    await addColumnIfMissing("foglalasok", name, sql);
   }
 
-  const indexes = [
-    { name: "idx_foglalasok_tura", sql: "ALTER TABLE foglalasok ADD INDEX idx_foglalasok_tura (tura_id)" },
-    { name: "idx_foglalasok_tour", sql: "ALTER TABLE foglalasok ADD INDEX idx_foglalasok_tour (tour_id)" },
-    { name: "idx_foglalasok_user", sql: "ALTER TABLE foglalasok ADD INDEX idx_foglalasok_user (felhasznalo_id)" },
-    { name: "idx_foglalasok_user2", sql: "ALTER TABLE foglalasok ADD INDEX idx_foglalasok_user2 (user_id)" },
-    { name: "idx_foglalasok_status", sql: "ALTER TABLE foglalasok ADD INDEX idx_foglalasok_status (status)" },
-  ];
-
-  for (const idx of indexes) {
-    const exists = await indexExists("foglalasok", idx.name);
-    if (!exists) {
-      try {
-        await dbPromise.query(idx.sql);
-      } catch (error) {
-        console.error(`❌ ${idx.name} hiba:`, error.message);
-      }
-    }
-  }
+  await addIndexIfMissing(
+    "foglalasok",
+    "idx_foglalasok_tura",
+    "ALTER TABLE foglalasok ADD INDEX idx_foglalasok_tura (tura_id)"
+  );
+  await addIndexIfMissing(
+    "foglalasok",
+    "idx_foglalasok_tour",
+    "ALTER TABLE foglalasok ADD INDEX idx_foglalasok_tour (tour_id)"
+  );
+  await addIndexIfMissing(
+    "foglalasok",
+    "idx_foglalasok_user",
+    "ALTER TABLE foglalasok ADD INDEX idx_foglalasok_user (felhasznalo_id)"
+  );
+  await addIndexIfMissing(
+    "foglalasok",
+    "idx_foglalasok_user2",
+    "ALTER TABLE foglalasok ADD INDEX idx_foglalasok_user2 (user_id)"
+  );
+  await addIndexIfMissing(
+    "foglalasok",
+    "idx_foglalasok_status",
+    "ALTER TABLE foglalasok ADD INDEX idx_foglalasok_status (status)"
+  );
 
   try {
     await dbPromise.query(`
@@ -654,22 +719,6 @@ async function ensureFoglalasokTableShape() {
   } catch (error) {
     console.error("❌ foglalasok normalize hiba:", error.message);
   }
-
-  try {
-    if (await columnExists("foglalasok", "nev")) {
-      await dbPromise.query("ALTER TABLE foglalasok MODIFY COLUMN nev VARCHAR(255) NULL");
-    }
-  } catch (error) {
-    console.error("❌ foglalasok.nev modify hiba:", error.message);
-  }
-
-  try {
-    if (await columnExists("foglalasok", "telefon")) {
-      await dbPromise.query("ALTER TABLE foglalasok MODIFY COLUMN telefon VARCHAR(60) NULL");
-    }
-  } catch (error) {
-    console.error("❌ foglalasok.telefon modify hiba:", error.message);
-  }
 }
 
 async function ensureFoglalasVendegekTableShape() {
@@ -677,81 +726,364 @@ async function ensureFoglalasVendegekTableShape() {
     CREATE TABLE IF NOT EXISTS foglalas_vendegek (
       id INT NOT NULL AUTO_INCREMENT,
       foglalas_id INT NOT NULL,
-      nev VARCHAR(255) NOT NULL,
+      booking_id INT NULL,
+      nev VARCHAR(255) DEFAULT NULL,
+      name VARCHAR(255) DEFAULT NULL,
       email VARCHAR(255) DEFAULT NULL,
       telefon VARCHAR(60) DEFAULT NULL,
+      phone VARCHAR(60) DEFAULT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `);
 
-  const missingColumns = [
-    {
-      name: "foglalas_id",
-      sql: "ALTER TABLE foglalas_vendegek ADD COLUMN foglalas_id INT NOT NULL AFTER id",
-    },
-    {
-      name: "booking_id",
-      sql: "ALTER TABLE foglalas_vendegek ADD COLUMN booking_id INT NULL AFTER foglalas_id",
-    },
-    {
-      name: "nev",
-      sql: "ALTER TABLE foglalas_vendegek ADD COLUMN nev VARCHAR(255) NULL AFTER booking_id",
-    },
-    {
-      name: "name",
-      sql: "ALTER TABLE foglalas_vendegek ADD COLUMN name VARCHAR(255) NULL AFTER nev",
-    },
-    {
-      name: "email",
-      sql: "ALTER TABLE foglalas_vendegek ADD COLUMN email VARCHAR(255) NULL AFTER name",
-    },
-    {
-      name: "telefon",
-      sql: "ALTER TABLE foglalas_vendegek ADD COLUMN telefon VARCHAR(60) NULL AFTER email",
-    },
-    {
-      name: "phone",
-      sql: "ALTER TABLE foglalas_vendegek ADD COLUMN phone VARCHAR(60) NULL AFTER telefon",
-    },
-    {
-      name: "created_at",
-      sql: "ALTER TABLE foglalas_vendegek ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER phone",
-    },
+  const cols = [
+    ["foglalas_id", "INT NOT NULL"],
+    ["booking_id", "INT NULL"],
+    ["nev", "VARCHAR(255) NULL"],
+    ["name", "VARCHAR(255) NULL"],
+    ["email", "VARCHAR(255) NULL"],
+    ["telefon", "VARCHAR(60) NULL"],
+    ["phone", "VARCHAR(60) NULL"],
+    ["created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"],
   ];
 
-  for (const column of missingColumns) {
-    const exists = await columnExists("foglalas_vendegek", column.name);
-    if (!exists) {
-      try {
-        await dbPromise.query(column.sql);
-      } catch (error) {
-        console.error(`❌ foglalas_vendegek.${column.name} hozzáadás hiba:`, error.message);
-      }
-    }
+  for (const [name, sql] of cols) {
+    await addColumnIfMissing("foglalas_vendegek", name, sql);
   }
 
-  const indexes = [
-    {
-      name: "idx_foglalas_vendegek_foglalas",
-      sql: "ALTER TABLE foglalas_vendegek ADD INDEX idx_foglalas_vendegek_foglalas (foglalas_id)",
-    },
-    {
-      name: "idx_foglalas_vendegek_booking",
-      sql: "ALTER TABLE foglalas_vendegek ADD INDEX idx_foglalas_vendegek_booking (booking_id)",
-    },
+  await addIndexIfMissing(
+    "foglalas_vendegek",
+    "idx_foglalas_vendegek_foglalas",
+    "ALTER TABLE foglalas_vendegek ADD INDEX idx_foglalas_vendegek_foglalas (foglalas_id)"
+  );
+  await addIndexIfMissing(
+    "foglalas_vendegek",
+    "idx_foglalas_vendegek_booking",
+    "ALTER TABLE foglalas_vendegek ADD INDEX idx_foglalas_vendegek_booking (booking_id)"
+  );
+}
+
+async function seedRentalProductsIfEmpty() {
+  const [rows] = await dbPromise.query(
+    "SELECT COUNT(*) AS dbCount FROM berles_termekek"
+  );
+  const count = Number(rows?.[0]?.dbCount || 0);
+
+  if (count > 0) return;
+
+  const demoItems = [
+    [
+      "Trekking hátizsák 45L",
+      "Hátizsák",
+      "EXPLORE",
+      5990,
+      4.8,
+      1.4,
+      "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=1400",
+      "Kényelmes, többnapos túrákra is alkalmas hátizsák.",
+      6,
+      1,
+    ],
+    [
+      "Könnyű sátor 2 személyes",
+      "Sátor",
+      "NordPeak",
+      8990,
+      4.7,
+      2.2,
+      "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=1400",
+      "Gyorsan állítható, vízálló túrasátor.",
+      4,
+      1,
+    ],
+    [
+      "Téli hálózsák",
+      "Hálózsák",
+      "TrailForge",
+      4490,
+      4.6,
+      1.8,
+      "https://images.unsplash.com/photo-1522163182402-834f871fd851?w=1400",
+      "Hűvösebb időre tervezett, meleg hálózsák.",
+      8,
+      1,
+    ],
+    [
+      "Önfelfújó matrac",
+      "Matrac",
+      "AlpineEdge",
+      2990,
+      4.5,
+      0.9,
+      "https://images.unsplash.com/photo-1473448912268-2022ce9509d8?w=1400",
+      "Kompakt és kényelmes alátámasztás éjszakára.",
+      10,
+      1,
+    ],
+    [
+      "Túrabot pár",
+      "Trekking",
+      "RiverRun",
+      1990,
+      4.4,
+      0.6,
+      "https://images.unsplash.com/photo-1551632811-561732d1e306?w=1400",
+      "Állítható hosszúságú, stabil túrabot szett.",
+      12,
+      1,
+    ],
+    [
+      "Fejlámpa 400 lumen",
+      "Biztonság",
+      "SummitLab",
+      1490,
+      4.7,
+      0.2,
+      "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=1400",
+      "Erős fényű, esti túrákhoz ideális fejlámpa.",
+      15,
+      1,
+    ],
+    [
+      "Gázfőző szett",
+      "Főzés",
+      "StoneWolf",
+      3490,
+      4.5,
+      0.7,
+      "https://images.unsplash.com/photo-1523986371872-9d3ba2e2f642?w=1400",
+      "Kompakt főzőkészlet gyors melegítéshez.",
+      5,
+      1,
+    ],
+    [
+      "Thermo kulacs 1L",
+      "Víz",
+      "EXPLORE",
+      990,
+      4.3,
+      0.4,
+      "https://images.unsplash.com/photo-1523362628745-0c100150b504?w=1400",
+      "Hidegen és melegen is sokáig tartja az italt.",
+      20,
+      1,
+    ],
+    [
+      "Esőkabát",
+      "Ruházat",
+      "NordPeak",
+      2590,
+      4.4,
+      0.5,
+      "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=1400",
+      "Vízlepergető, könnyű és jól pakolható kabát.",
+      9,
+      1,
+    ],
+    [
+      "Túranavigáció GPS",
+      "Navigáció",
+      "TrailForge",
+      7990,
+      4.8,
+      0.3,
+      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1400",
+      "Offline térképpel is használható kézi GPS eszköz.",
+      3,
+      1,
+    ],
+    [
+      "SUP mellény",
+      "Biztonság",
+      "RiverRun",
+      1790,
+      4.2,
+      0.6,
+      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1400",
+      "Vízi programokhoz kényelmes mentőmellény.",
+      7,
+      1,
+    ],
+    [
+      "Prémium túrahátizsák 65L",
+      "Hátizsák",
+      "AlpineEdge",
+      7490,
+      4.9,
+      1.9,
+      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1400",
+      "Nagy kapacitású, többnapos utakra tervezve.",
+      4,
+      1,
+    ],
   ];
 
-  for (const idx of indexes) {
-    const exists = await indexExists("foglalas_vendegek", idx.name);
-    if (!exists) {
-      try {
-        await dbPromise.query(idx.sql);
-      } catch (error) {
-        console.error(`❌ ${idx.name} hiba:`, error.message);
-      }
-    }
+  await dbPromise.query(
+    `INSERT INTO berles_termekek
+      (nev, kategoria, marka, ar_per_nap, ertekeles, suly_kg, kep, leiras, darabszam, aktiv)
+     VALUES ?`,
+    [demoItems]
+  );
+}
+
+async function tryMigrateOldBerlesTable() {
+  const hasOldBerles = await tableExists("berles");
+  if (!hasOldBerles) return;
+
+  const [newRows] = await dbPromise.query(
+    "SELECT COUNT(*) AS dbCount FROM berles_termekek"
+  );
+  const newCount = Number(newRows?.[0]?.dbCount || 0);
+  if (newCount > 0) return;
+
+  const oldCols = await getTableColumnsSet("berles");
+  if (!oldCols.size) return;
+
+  const nevCol = pickExistingColumn(oldCols, ["nev", "cim", "name", "termek_nev"]);
+  const katCol = pickExistingColumn(oldCols, ["kategoria", "category"]);
+  const markaCol = pickExistingColumn(oldCols, ["marka", "brand"]);
+  const arCol = pickExistingColumn(oldCols, ["ar_per_nap", "napi_ar", "ar", "price"]);
+  const ertekelesCol = pickExistingColumn(oldCols, ["ertekeles", "rating"]);
+  const sulyCol = pickExistingColumn(oldCols, ["suly_kg", "suly", "weight"]);
+  const kepCol = pickExistingColumn(oldCols, ["kep", "img", "image", "image_url"]);
+  const leirasCol = pickExistingColumn(oldCols, ["leiras", "description"]);
+  const darabCol = pickExistingColumn(oldCols, ["darabszam", "keszlet", "stock", "db"]);
+  const aktivCol = pickExistingColumn(oldCols, ["aktiv", "active"]);
+
+  const nevExpr = nullSafeExpr(nevCol, "'Termék'");
+  const katExpr = nullSafeExpr(katCol, "'Egyéb'");
+  const markaExpr = nullSafeExpr(markaCol, "'EXPLORE'");
+  const arExpr = arCol ? `COALESCE(${arCol}, 0)` : "0";
+  const ertekelesExpr = ertekelesCol ? `COALESCE(${ertekelesCol}, 4.5)` : "4.5";
+  const sulyExpr = sulyCol ? `COALESCE(${sulyCol}, NULL)` : "NULL";
+  const kepExpr = nullSafeExpr(
+    kepCol,
+    "'https://images.unsplash.com/photo-1522163182402-834f871fd851?w=1400'"
+  );
+  const leirasExpr = nullSafeExpr(leirasCol, "'Bérelhető felszerelés'");
+  const darabExpr = darabCol ? `COALESCE(${darabCol}, 0)` : "0";
+  const aktivExpr = aktivCol ? `COALESCE(${aktivCol}, 1)` : "1";
+
+  await dbPromise.query(`
+    INSERT INTO berles_termekek
+      (nev, kategoria, marka, ar_per_nap, ertekeles, suly_kg, kep, leiras, darabszam, aktiv)
+    SELECT
+      ${nevExpr},
+      ${katExpr},
+      ${markaExpr},
+      ${arExpr},
+      ${ertekelesExpr},
+      ${sulyExpr},
+      ${kepExpr},
+      ${leirasExpr},
+      ${darabExpr},
+      ${aktivExpr}
+    FROM berles
+  `);
+}
+
+async function ensureBerlesTermekekTableShape() {
+  await dbPromise.query(`
+    CREATE TABLE IF NOT EXISTS berles_termekek (
+      id INT NOT NULL AUTO_INCREMENT,
+      nev VARCHAR(255) NOT NULL,
+      kategoria VARCHAR(100) DEFAULT NULL,
+      marka VARCHAR(100) DEFAULT NULL,
+      ar_per_nap INT NOT NULL DEFAULT 0,
+      ertekeles DECIMAL(3,2) DEFAULT NULL,
+      suly_kg DECIMAL(6,2) DEFAULT NULL,
+      kep VARCHAR(2000) DEFAULT NULL,
+      leiras TEXT DEFAULT NULL,
+      darabszam INT NOT NULL DEFAULT 0,
+      aktiv TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+
+  const cols = [
+    ["nev", "VARCHAR(255) NOT NULL DEFAULT 'Termék'"],
+    ["kategoria", "VARCHAR(100) NULL"],
+    ["marka", "VARCHAR(100) NULL"],
+    ["ar_per_nap", "INT NOT NULL DEFAULT 0"],
+    ["ertekeles", "DECIMAL(3,2) NULL"],
+    ["suly_kg", "DECIMAL(6,2) NULL"],
+    ["kep", "VARCHAR(2000) NULL"],
+    ["leiras", "TEXT NULL"],
+    ["darabszam", "INT NOT NULL DEFAULT 0"],
+    ["aktiv", "TINYINT(1) NOT NULL DEFAULT 1"],
+    ["created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"],
+    [
+      "updated_at",
+      "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+    ],
+  ];
+
+  for (const [name, sql] of cols) {
+    await addColumnIfMissing("berles_termekek", name, sql);
   }
+
+  await tryMigrateOldBerlesTable();
+  await seedRentalProductsIfEmpty();
+}
+
+async function ensureBerlesRendelesekTableShape() {
+  await dbPromise.query(`
+    CREATE TABLE IF NOT EXISTS berles_rendelesek (
+      id INT NOT NULL AUTO_INCREMENT,
+      felhasznalo_id INT NOT NULL,
+      termek_id INT NOT NULL,
+      termek_nev VARCHAR(255) NOT NULL,
+      mennyiseg INT NOT NULL DEFAULT 1,
+      kezd DATE NOT NULL,
+      vege DATE NOT NULL,
+      napi_ar INT NOT NULL DEFAULT 0,
+      vegosszeg INT NOT NULL DEFAULT 0,
+      status VARCHAR(50) NOT NULL DEFAULT 'uj',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `);
+
+  const cols = [
+    ["felhasznalo_id", "INT NOT NULL DEFAULT 0"],
+    ["termek_id", "INT NOT NULL DEFAULT 0"],
+    ["termek_nev", "VARCHAR(255) NOT NULL DEFAULT 'Termék'"],
+    ["mennyiseg", "INT NOT NULL DEFAULT 1"],
+    ["kezd", "DATE NOT NULL"],
+    ["vege", "DATE NOT NULL"],
+    ["napi_ar", "INT NOT NULL DEFAULT 0"],
+    ["vegosszeg", "INT NOT NULL DEFAULT 0"],
+    ["status", "VARCHAR(50) NOT NULL DEFAULT 'uj'"],
+    ["created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"],
+    [
+      "updated_at",
+      "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+    ],
+  ];
+
+  for (const [name, sql] of cols) {
+    await addColumnIfMissing("berles_rendelesek", name, sql);
+  }
+
+  await addIndexIfMissing(
+    "berles_rendelesek",
+    "idx_berles_rendelesek_user",
+    "ALTER TABLE berles_rendelesek ADD INDEX idx_berles_rendelesek_user (felhasznalo_id)"
+  );
+  await addIndexIfMissing(
+    "berles_rendelesek",
+    "idx_berles_rendelesek_termek",
+    "ALTER TABLE berles_rendelesek ADD INDEX idx_berles_rendelesek_termek (termek_id)"
+  );
+  await addIndexIfMissing(
+    "berles_rendelesek",
+    "idx_berles_rendelesek_status",
+    "ALTER TABLE berles_rendelesek ADD INDEX idx_berles_rendelesek_status (status)"
+  );
 }
 
 async function getRentalStatsSafe() {
@@ -791,10 +1123,35 @@ async function getRentalStatsSafe() {
   }
 }
 
+async function ensureAdminUserIfEmpty() {
+  const [rows] = await dbPromise.query(
+    "SELECT COUNT(*) AS dbCount FROM felhasznalok"
+  );
+  const count = Number(rows?.[0]?.dbCount || 0);
+
+  if (count > 0) return;
+
+  const hashedPassword = await bcrypt.hash("Teszt123!", 10);
+
+  await dbPromise.query(
+    `INSERT INTO felhasznalok
+      (nev, email, jelszo, szerepkor, aktiv, profilkep, varos, szuletesi_datum)
+     VALUES (?, ?, ?, 'admin', 1, NULL, NULL, NULL)`,
+    ["Admin", "admin@explore.hu", hashedPassword]
+  );
+
+  console.log("✅ Alap admin felhasználó létrehozva: admin@explore.hu / Teszt123!");
+}
+
 async function ensureTables() {
+  await ensureFelhasznalokTableShape();
+  await ensureKapcsolatUzenetekTableShape();
   await ensureTurakTableShape();
   await ensureFoglalasokTableShape();
   await ensureFoglalasVendegekTableShape();
+  await ensureBerlesTermekekTableShape();
+  await ensureBerlesRendelesekTableShape();
+  await ensureAdminUserIfEmpty();
 }
 
 /* =====================================
@@ -829,9 +1186,6 @@ app.get("/api/status", (req, res) => {
 
 /* ===== KAPCSOLAT / ÍRJ NEKÜNK ===== */
 app.post("/api/contact", async (req, res) => {
-  console.log("CONTACT ROUTE ELÉRVE");
-  console.log("CONTACT BODY:", req.body);
-
   try {
     const { nev, email, targy, uzenet } = req.body;
 
@@ -852,8 +1206,6 @@ app.post("/api/contact", async (req, res) => {
     const cleanTargy = String(targy || "").trim() || null;
     const cleanUzenet = String(uzenet).trim();
 
-    console.log("CONTACT INSERT indul");
-
     await dbPromise.query(
       `
       INSERT INTO kapcsolat_uzenetek
@@ -863,13 +1215,11 @@ app.post("/api/contact", async (req, res) => {
       [null, cleanNev, cleanEmail, cleanTargy, cleanUzenet]
     );
 
-    console.log("CONTACT INSERT kész");
-
     return res.status(201).json({
       message: "Köszönjük az üzenetedet! Hamarosan felvesszük veled a kapcsolatot.",
     });
   } catch (error) {
-    console.error("❌ CONTACT HIBA:", error);
+    console.error("❌ CONTACT HIBA:", error.message);
     return res.status(500).json({
       error: "Nem sikerült elküldeni az üzenetet. Próbáld meg újra.",
     });
@@ -1097,20 +1447,31 @@ app.get("/api/tours/:identifier", async (req, res) => {
 });
 
 /* ===== BÉRLÉS TERMÉKEK LISTA ===== */
-app.get("/api/berles-termekek", (req, res) => {
-  db.query(
-    `SELECT id, nev, kategoria, marka, ar_per_nap, ertekeles, suly_kg, kep, leiras, darabszam, aktiv
-     FROM berles_termekek
-     WHERE aktiv = 1
-     ORDER BY id DESC`,
-    (err, results) => {
-      if (err) {
-        return res.status(500).json({ error: "DB hiba" });
-      }
+app.get("/api/berles-termekek", async (req, res) => {
+  try {
+    const [rows] = await dbPromise.query(`
+      SELECT
+        id,
+        nev,
+        kategoria,
+        marka,
+        ar_per_nap,
+        ertekeles,
+        suly_kg,
+        kep,
+        leiras,
+        darabszam,
+        aktiv
+      FROM berles_termekek
+      WHERE aktiv = 1
+      ORDER BY id DESC
+    `);
 
-      res.json(results);
-    }
-  );
+    res.json((rows || []).map(mapRentalRow));
+  } catch (error) {
+    console.error("❌ BERLES TERMÉKEK HIBA:", error.message);
+    return res.status(500).json({ error: "DB hiba" });
+  }
 });
 
 /* ===== TÚRA FOGLALÁS ===== */
@@ -1299,10 +1660,6 @@ app.post("/api/foglalas", authMiddleware, async (req, res) => {
     pushIfExists("megjegyzes", String(note || "").trim() || null);
     pushIfExists("note", String(note || "").trim() || null);
 
-    pushIfExists("tour_badge", tour.badge || null);
-    pushIfExists("tour_dur", tour.idotartam || null);
-    pushIfExists("tour_price", Number(tour.ar || 0));
-
     pushIfExists("status", "uj");
 
     if (!insertColumns.length) {
@@ -1365,9 +1722,7 @@ app.post("/api/foglalas", authMiddleware, async (req, res) => {
           await connection.query(
             `
             INSERT INTO foglalas_vendegek (${guestInsertColumns.join(", ")})
-            VALUES ${guestRows
-              .map(() => `(${guestPlaceholders})`)
-              .join(", ")}
+            VALUES ${guestRows.map(() => `(${guestPlaceholders})`).join(", ")}
             `,
             guestRows.flat()
           );
@@ -1441,8 +1796,8 @@ app.post("/api/berles/checkout", authMiddleware, async (req, res) => {
   const normalizedMap = new Map();
 
   for (const rawItem of items) {
-    const termekId = Number(rawItem.termekId);
-    const mennyiseg = Number(rawItem.mennyiseg || 1);
+    const termekId = Number(rawItem.termekId || rawItem.id);
+    const mennyiseg = Number(rawItem.mennyiseg || rawItem.quantity || 1);
 
     if (!termekId || Number.isNaN(termekId)) continue;
     if (!mennyiseg || Number.isNaN(mennyiseg) || mennyiseg < 1) continue;
@@ -1497,11 +1852,11 @@ app.post("/api/berles/checkout", authMiddleware, async (req, res) => {
         throw makeError(`${product.nev} jelenleg nem aktív.`);
       }
 
-      if (product.darabszam <= 0) {
+      if (Number(product.darabszam) <= 0) {
         throw makeError(`${product.nev} elfogyott!`);
       }
 
-      if (product.darabszam < item.mennyiseg) {
+      if (Number(product.darabszam) < item.mennyiseg) {
         throw makeError(
           `${product.nev} termékből csak ${product.darabszam} db maradt.`
         );
@@ -1513,7 +1868,7 @@ app.post("/api/berles/checkout", authMiddleware, async (req, res) => {
 
     for (const item of normalizedItems) {
       const product = productMap.get(item.termekId);
-      const lineTotal = product.ar_per_nap * item.mennyiseg * napok;
+      const lineTotal = Number(product.ar_per_nap || 0) * item.mennyiseg * napok;
 
       await connection.query(
         "UPDATE berles_termekek SET darabszam = darabszam - ? WHERE id = ?",
@@ -1527,7 +1882,7 @@ app.post("/api/berles/checkout", authMiddleware, async (req, res) => {
         item.mennyiseg,
         kezd,
         vege,
-        product.ar_per_nap,
+        Number(product.ar_per_nap || 0),
         lineTotal,
         "uj",
       ]);
@@ -1568,132 +1923,163 @@ app.post("/api/berles/checkout", authMiddleware, async (req, res) => {
 
 /* ===== REGISTER ===== */
 app.post("/api/register", async (req, res) => {
-  const { firstName, lastName, email, password, city, birthDate } = req.body;
+  try {
+    const {
+      firstName,
+      lastName,
+      nev,
+      email,
+      password,
+      city,
+      varos,
+      birthDate,
+      szuletesi_datum,
+      gender,
+      nem,
+    } = req.body;
 
-  if (!firstName || !lastName || !email || !password || !city) {
-    return res.status(400).json({ error: "Hiányzó adatok!" });
-  }
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const cleanPassword = String(password || "");
+    const cleanFirstName = String(firstName || "").trim();
+    const cleanLastName = String(lastName || "").trim();
+    const cleanFullName =
+      String(nev || "").trim() ||
+      `${cleanLastName} ${cleanFirstName}`.trim() ||
+      cleanFirstName ||
+      cleanLastName;
 
-  if (String(password).trim().length < 6) {
-    return res.status(400).json({ error: "A jelszó legalább 6 karakter legyen!" });
-  }
+    const cleanCity = normalizeCity(city || varos || "");
+    const cleanBirthDate = birthDate || szuletesi_datum || null;
+    const cleanNem = String(gender || nem || "").trim() || null;
 
-  if (birthDate && !isValidSqlDateString(birthDate)) {
-    return res.status(400).json({ error: "Érvénytelen születési dátum!" });
-  }
-
-  const fullName = `${lastName} ${firstName}`;
-  const cleanCity = normalizeCity(city);
-  const cleanBirthDate = birthDate || null;
-
-  db.query(
-    "SELECT id FROM felhasznalok WHERE email = ?",
-    [String(email).trim()],
-    async (err, results) => {
-      if (err) {
-        return res.status(500).json({ error: "DB hiba" });
-      }
-
-      if (results.length > 0) {
-        return res.status(400).json({ error: "Email már létezik!" });
-      }
-
-      try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        db.query(
-          `INSERT INTO felhasznalok
-            (nev, email, varos, szuletesi_datum, jelszo, profilkep, szerepkor, aktiv)
-           VALUES (?, ?, ?, ?, ?, NULL, 'user', 1)`,
-          [fullName, String(email).trim(), cleanCity, cleanBirthDate, hashedPassword],
-          (insertErr) => {
-            if (insertErr) {
-              console.error("❌ REG INSERT HIBA:", insertErr.message);
-              return res.status(500).json({ error: "Mentési hiba" });
-            }
-
-            res.status(201).json({ message: "Sikeres regisztráció!" });
-          }
-        );
-      } catch (hashErr) {
-        return res.status(500).json({ error: "Jelszó titkosítási hiba" });
-      }
+    if (!cleanFullName || !cleanEmail || !cleanPassword) {
+      return res
+        .status(400)
+        .json({ error: "A név, email és jelszó megadása kötelező!" });
     }
-  );
+
+    if (cleanPassword.length < 6) {
+      return res
+        .status(400)
+        .json({ error: "A jelszó legalább 6 karakter legyen!" });
+    }
+
+    if (cleanBirthDate && !isValidSqlDateString(cleanBirthDate)) {
+      return res.status(400).json({ error: "Érvénytelen születési dátum!" });
+    }
+
+    const [existing] = await dbPromise.query(
+      "SELECT id FROM felhasznalok WHERE email = ? LIMIT 1",
+      [cleanEmail]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({ error: "Email már létezik!" });
+    }
+
+    const hashedPassword = await bcrypt.hash(cleanPassword, 10);
+
+    await dbPromise.query(
+      `INSERT INTO felhasznalok
+        (nev, email, varos, szuletesi_datum, nem, jelszo, profilkep, szerepkor, aktiv)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, 'user', 1)`,
+      [
+        cleanFullName,
+        cleanEmail,
+        cleanCity || null,
+        cleanBirthDate || null,
+        cleanNem,
+        hashedPassword,
+      ]
+    );
+
+    res.status(201).json({ message: "Sikeres regisztráció!" });
+  } catch (error) {
+    console.error("❌ REGISTER HIBA:", error.message);
+    return res.status(500).json({ error: "Mentési hiba" });
+  }
 });
 
 /* ===== LOGIN ===== */
-app.post("/api/login", (req, res) => {
-  const { email, password } = req.body;
+app.post("/api/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-  db.query(
-    "SELECT * FROM felhasznalok WHERE email = ?",
-    [email],
-    async (err, results) => {
-      if (err) {
-        return res.status(500).json({ error: "DB hiba" });
-      }
+    const cleanEmail = String(email || "").trim().toLowerCase();
+    const cleanPassword = String(password || "");
 
-      if (results.length === 0) {
-        return res.status(401).json({ error: "Hibás adatok!" });
-      }
-
-      const user = results[0];
-
-      try {
-        const isMatch = await bcrypt.compare(password, user.jelszo);
-
-        if (!isMatch) {
-          return res.status(401).json({ error: "Hibás adatok!" });
-        }
-
-        const token = jwt.sign({ id: user.id }, JWT_SECRET, {
-          expiresIn: "1d",
-        });
-
-        res.json({
-          message: "Sikeres belépés!",
-          token,
-          user: {
-            id: user.id,
-            nev: user.nev,
-            email: user.email,
-            szerepkor: user.szerepkor,
-            profilkep: user.profilkep,
-            varos: user.varos || "",
-            szuletesi_datum: user.szuletesi_datum || null,
-            eletkor: calculateAge(user.szuletesi_datum),
-          },
-        });
-      } catch (compareErr) {
-        return res.status(500).json({ error: "Belépési hiba" });
-      }
+    if (!cleanEmail || !cleanPassword) {
+      return res.status(400).json({ error: "Hiányzó adatok!" });
     }
-  );
+
+    const [results] = await dbPromise.query(
+      "SELECT * FROM felhasznalok WHERE email = ? LIMIT 1",
+      [cleanEmail]
+    );
+
+    if (results.length === 0) {
+      return res.status(401).json({ error: "Hibás adatok!" });
+    }
+
+    const user = results[0];
+
+    if (Number(user.aktiv) === 0) {
+      return res.status(403).json({ error: "Ez a felhasználó inaktív!" });
+    }
+
+    const isMatch = await bcrypt.compare(cleanPassword, user.jelszo);
+
+    if (!isMatch) {
+      return res.status(401).json({ error: "Hibás adatok!" });
+    }
+
+    const token = jwt.sign({ id: user.id }, JWT_SECRET, {
+      expiresIn: "1d",
+    });
+
+    res.json({
+      message: "Sikeres belépés!",
+      token,
+      user: {
+        id: user.id,
+        nev: user.nev,
+        email: user.email,
+        szerepkor: user.szerepkor,
+        profilkep: user.profilkep,
+        varos: user.varos || "",
+        szuletesi_datum: user.szuletesi_datum || null,
+        nem: user.nem || null,
+        eletkor: calculateAge(user.szuletesi_datum),
+      },
+    });
+  } catch (error) {
+    console.error("❌ LOGIN HIBA:", error.message);
+    return res.status(500).json({ error: "Belépési hiba" });
+  }
 });
 
 /* ===== PROFILE GET ===== */
-app.get("/api/profile", authMiddleware, (req, res) => {
-  db.query(
-    "SELECT id, nev, email, szerepkor, profilkep, varos, szuletesi_datum FROM felhasznalok WHERE id = ?",
-    [req.user.id],
-    (err, results) => {
-      if (err) {
-        return res.status(500).json({ error: "DB hiba" });
-      }
+app.get("/api/profile", authMiddleware, async (req, res) => {
+  try {
+    const [results] = await dbPromise.query(
+      "SELECT id, nev, email, szerepkor, profilkep, varos, szuletesi_datum, nem FROM felhasznalok WHERE id = ? LIMIT 1",
+      [req.user.id]
+    );
 
-      if (results.length === 0) {
-        return res.status(404).json({ error: "Felhasználó nem található!" });
-      }
-
-      const dbUser = results[0];
-
-      res.json({
-        ...dbUser,
-        eletkor: calculateAge(dbUser.szuletesi_datum),
-      });
+    if (results.length === 0) {
+      return res.status(404).json({ error: "Felhasználó nem található!" });
     }
-  );
+
+    const dbUser = results[0];
+
+    res.json({
+      ...dbUser,
+      eletkor: calculateAge(dbUser.szuletesi_datum),
+    });
+  } catch (error) {
+    console.error("❌ PROFILE GET HIBA:", error.message);
+    return res.status(500).json({ error: "DB hiba" });
+  }
 });
 
 /* ===== PROFILE IMAGE UPLOAD ===== */
@@ -1701,105 +2087,93 @@ app.post(
   "/api/profile/avatar",
   authMiddleware,
   upload.single("avatar"),
-  (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ error: "Nincs kiválasztott kép!" });
-    }
-
-    const imagePath = `/uploads/${req.file.filename}`;
-
-    db.query(
-      "SELECT profilkep FROM felhasznalok WHERE id = ?",
-      [req.user.id],
-      (selectErr, results) => {
-        if (selectErr) {
-          return res.status(500).json({ error: "DB hiba" });
-        }
-
-        const oldImage = results?.[0]?.profilkep || null;
-
-        db.query(
-          "UPDATE felhasznalok SET profilkep = ? WHERE id = ?",
-          [imagePath, req.user.id],
-          (updateErr) => {
-            if (updateErr) {
-              return res.status(500).json({ error: "DB hiba" });
-            }
-
-            if (oldImage && oldImage !== imagePath) {
-              deleteLocalImage(oldImage);
-            }
-
-            res.json({
-              message: "Profilkép frissítve!",
-              profilkep: imagePath,
-            });
-          }
-        );
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Nincs kiválasztott kép!" });
       }
-    );
-  }
-);
 
-/* ===== PASSWORD CHANGE ===== */
-app.put("/api/profile/password", authMiddleware, async (req, res) => {
-  const { currentPassword, newPassword, confirmPassword } = req.body;
+      const imagePath = `/uploads/${req.file.filename}`;
 
-  if (!currentPassword || !newPassword || !confirmPassword) {
-    return res.status(400).json({ error: "Minden mezőt tölts ki!" });
-  }
-
-  if (newPassword.length < 6) {
-    return res
-      .status(400)
-      .json({ error: "Az új jelszó legyen legalább 6 karakter!" });
-  }
-
-  if (newPassword !== confirmPassword) {
-    return res.status(400).json({ error: "Az új jelszavak nem egyeznek!" });
-  }
-
-  db.query(
-    "SELECT id, jelszo FROM felhasznalok WHERE id = ?",
-    [req.user.id],
-    async (err, results) => {
-      if (err) {
-        return res.status(500).json({ error: "DB hiba" });
-      }
+      const [results] = await dbPromise.query(
+        "SELECT profilkep FROM felhasznalok WHERE id = ? LIMIT 1",
+        [req.user.id]
+      );
 
       if (!results.length) {
         return res.status(404).json({ error: "Felhasználó nem található!" });
       }
 
-      const dbUser = results[0];
+      const oldImage = results?.[0]?.profilkep || null;
 
-      try {
-        const isMatch = await bcrypt.compare(currentPassword, dbUser.jelszo);
+      await dbPromise.query(
+        "UPDATE felhasznalok SET profilkep = ? WHERE id = ?",
+        [imagePath, req.user.id]
+      );
 
-        if (!isMatch) {
-          return res.status(400).json({ error: "A jelenlegi jelszó hibás!" });
-        }
-
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-        db.query(
-          "UPDATE felhasznalok SET jelszo = ? WHERE id = ?",
-          [hashedPassword, req.user.id],
-          (updateErr) => {
-            if (updateErr) {
-              return res
-                .status(500)
-                .json({ error: "Nem sikerült a jelszó módosítása!" });
-            }
-
-            res.json({ message: "Jelszó sikeresen módosítva!" });
-          }
-        );
-      } catch (hashErr) {
-        return res.status(500).json({ error: "Jelszó módosítási hiba" });
+      if (oldImage && oldImage !== imagePath) {
+        deleteLocalImage(oldImage);
       }
+
+      res.json({
+        message: "Profilkép frissítve!",
+        profilkep: imagePath,
+      });
+    } catch (error) {
+      console.error("❌ PROFILE AVATAR HIBA:", error.message);
+      return res.status(500).json({ error: "DB hiba" });
     }
-  );
+  }
+);
+
+/* ===== PASSWORD CHANGE ===== */
+app.put("/api/profile/password", authMiddleware, async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ error: "Minden mezőt tölts ki!" });
+    }
+
+    if (String(newPassword).length < 6) {
+      return res
+        .status(400)
+        .json({ error: "Az új jelszó legyen legalább 6 karakter!" });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ error: "Az új jelszavak nem egyeznek!" });
+    }
+
+    const [results] = await dbPromise.query(
+      "SELECT id, jelszo FROM felhasznalok WHERE id = ? LIMIT 1",
+      [req.user.id]
+    );
+
+    if (!results.length) {
+      return res.status(404).json({ error: "Felhasználó nem található!" });
+    }
+
+    const dbUser = results[0];
+
+    const isMatch = await bcrypt.compare(currentPassword, dbUser.jelszo);
+
+    if (!isMatch) {
+      return res.status(400).json({ error: "A jelenlegi jelszó hibás!" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await dbPromise.query(
+      "UPDATE felhasznalok SET jelszo = ? WHERE id = ?",
+      [hashedPassword, req.user.id]
+    );
+
+    res.json({ message: "Jelszó sikeresen módosítva!" });
+  } catch (error) {
+    console.error("❌ PASSWORD CHANGE HIBA:", error.message);
+    return res.status(500).json({ error: "Jelszó módosítási hiba" });
+  }
 });
 
 /* ===== ADMIN DASHBOARD ===== */
@@ -1817,7 +2191,10 @@ app.get(
           szerepkor,
           profilkep,
           varos,
-          szuletesi_datum
+          szuletesi_datum,
+          nem,
+          aktiv,
+          letrehozva
          FROM felhasznalok
          ORDER BY id DESC`
       );
@@ -1943,55 +2320,52 @@ app.put(
   "/api/admin/users/:id/role",
   authMiddleware,
   adminMiddleware,
-  (req, res) => {
-    const targetId = Number(req.params.id);
-    const { szerepkor } = req.body;
+  async (req, res) => {
+    try {
+      const targetId = Number(req.params.id);
+      const { szerepkor } = req.body;
 
-    if (!targetId || Number.isNaN(targetId)) {
-      return res.status(400).json({ error: "Érvénytelen user azonosító!" });
-    }
-
-    if (!["admin", "user"].includes(szerepkor)) {
-      return res.status(400).json({ error: "Érvénytelen szerepkör!" });
-    }
-
-    if (req.user.id === targetId && szerepkor !== "admin") {
-      return res
-        .status(400)
-        .json({ error: "Saját magadat nem rakhatod vissza userre." });
-    }
-
-    db.query(
-      "SELECT id, nev, email, szerepkor, profilkep FROM felhasznalok WHERE id = ? LIMIT 1",
-      [targetId],
-      (findErr, results) => {
-        if (findErr) {
-          return res.status(500).json({ error: "DB hiba" });
-        }
-
-        if (!results.length) {
-          return res.status(404).json({ error: "Felhasználó nem található!" });
-        }
-
-        db.query(
-          "UPDATE felhasznalok SET szerepkor = ? WHERE id = ?",
-          [szerepkor, targetId],
-          (updateErr) => {
-            if (updateErr) {
-              return res.status(500).json({ error: "Nem sikerült frissíteni a szerepkört!" });
-            }
-
-            res.json({
-              message: "Szerepkör sikeresen frissítve!",
-              user: {
-                ...results[0],
-                szerepkor,
-              },
-            });
-          }
-        );
+      if (!targetId || Number.isNaN(targetId)) {
+        return res.status(400).json({ error: "Érvénytelen user azonosító!" });
       }
-    );
+
+      if (!["admin", "user"].includes(szerepkor)) {
+        return res.status(400).json({ error: "Érvénytelen szerepkör!" });
+      }
+
+      if (req.user.id === targetId && szerepkor !== "admin") {
+        return res
+          .status(400)
+          .json({ error: "Saját magadat nem rakhatod vissza userre." });
+      }
+
+      const [results] = await dbPromise.query(
+        "SELECT id, nev, email, szerepkor, profilkep FROM felhasznalok WHERE id = ? LIMIT 1",
+        [targetId]
+      );
+
+      if (!results.length) {
+        return res.status(404).json({ error: "Felhasználó nem található!" });
+      }
+
+      await dbPromise.query(
+        "UPDATE felhasznalok SET szerepkor = ? WHERE id = ?",
+        [szerepkor, targetId]
+      );
+
+      res.json({
+        message: "Szerepkör sikeresen frissítve!",
+        user: {
+          ...results[0],
+          szerepkor,
+        },
+      });
+    } catch (error) {
+      console.error("❌ ADMIN ROLE UPDATE HIBA:", error.message);
+      return res
+        .status(500)
+        .json({ error: "Nem sikerült frissíteni a szerepkört!" });
+    }
   }
 );
 
@@ -2046,32 +2420,32 @@ app.post(
       insertValues.push(finalSlug);
 
       insertColumns.push("cim");
-      insertValues.push(title.trim());
+      insertValues.push(String(title).trim());
 
       insertColumns.push("rovid_leiras");
-      insertValues.push(shortDesc?.trim() || null);
+      insertValues.push(String(shortDesc || "").trim() || null);
 
       insertColumns.push("leiras");
-      insertValues.push(desc.trim());
+      insertValues.push(String(desc).trim());
 
       insertColumns.push("kategoria");
-      insertValues.push(category.trim());
+      insertValues.push(String(category).trim());
 
       insertColumns.push("nehezseg");
-      insertValues.push(level.trim());
+      insertValues.push(String(level).trim());
 
       insertColumns.push("idotartam");
-      insertValues.push(dur.trim());
+      insertValues.push(String(dur).trim());
 
       insertColumns.push("badge");
-      insertValues.push(badge?.trim() || "EXPLORE");
+      insertValues.push(String(badge || "EXPLORE").trim());
 
       insertColumns.push("ar");
       insertValues.push(parsedPrice);
 
       insertColumns.push("kep");
       insertValues.push(
-        img?.trim() ||
+        String(img || "").trim() ||
           "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1400"
       );
 
@@ -2083,12 +2457,12 @@ app.post(
 
       if (await columnExists("turak", "nev")) {
         insertColumns.push("nev");
-        insertValues.push(title.trim());
+        insertValues.push(String(title).trim());
       }
 
       if (await columnExists("turak", "helyszin")) {
         insertColumns.push("helyszin");
-        insertValues.push(category.trim());
+        insertValues.push(String(category).trim());
       }
 
       if (await columnExists("turak", "datum")) {
@@ -2145,6 +2519,166 @@ app.post(
       console.error("❌ TOUR CREATE HIBA:", error.message);
       res.status(500).json({
         error: error.message || "Nem sikerült létrehozni a túrát.",
+      });
+    }
+  }
+);
+
+/* ===== ADMIN TOUR UPDATE ===== */
+app.put(
+  "/api/admin/tours/:id",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const tourId = Number(req.params.id);
+
+      if (!tourId || Number.isNaN(tourId)) {
+        return res.status(400).json({ error: "Érvénytelen túra azonosító!" });
+      }
+
+      const {
+        title,
+        shortDesc,
+        desc,
+        category,
+        level,
+        dur,
+        badge,
+        price,
+        img,
+        maxPeople,
+      } = req.body;
+
+      const parsedPrice = Number(price);
+      const parsedMaxPeople = Number(maxPeople);
+
+      if (!title || !String(title).trim()) {
+        return res.status(400).json({ error: "A cím kötelező!" });
+      }
+
+      if (!desc || !String(desc).trim()) {
+        return res.status(400).json({ error: "A leírás kötelező!" });
+      }
+
+      if (!category || !String(category).trim()) {
+        return res.status(400).json({ error: "A kategória kötelező!" });
+      }
+
+      if (!level || !String(level).trim()) {
+        return res.status(400).json({ error: "A nehézség kötelező!" });
+      }
+
+      if (!dur || !String(dur).trim()) {
+        return res.status(400).json({ error: "Az időtartam kötelező!" });
+      }
+
+      if (Number.isNaN(parsedPrice) || parsedPrice < 0) {
+        return res.status(400).json({ error: "Érvénytelen ár!" });
+      }
+
+      if (
+        Number.isNaN(parsedMaxPeople) ||
+        parsedMaxPeople < 1 ||
+        parsedMaxPeople > 500
+      ) {
+        return res.status(400).json({
+          error: "A maximális létszám 1 és 500 között lehet!",
+        });
+      }
+
+      const [existing] = await dbPromise.query(
+        "SELECT id, slug FROM turak WHERE id = ? LIMIT 1",
+        [tourId]
+      );
+
+      if (!existing.length) {
+        return res.status(404).json({ error: "A túra nem található!" });
+      }
+
+      await dbPromise.query(
+        `
+        UPDATE turak
+        SET
+          cim = ?,
+          rovid_leiras = ?,
+          leiras = ?,
+          kategoria = ?,
+          nehezseg = ?,
+          idotartam = ?,
+          badge = ?,
+          ar = ?,
+          kep = ?,
+          letszam_max = ?
+        WHERE id = ?
+        `,
+        [
+          String(title).trim(),
+          String(shortDesc || "").trim() || null,
+          String(desc).trim(),
+          String(category).trim(),
+          String(level).trim(),
+          String(dur).trim(),
+          String(badge || "EXPLORE").trim(),
+          parsedPrice,
+          String(img || "").trim() ||
+            "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1400",
+          parsedMaxPeople,
+          tourId,
+        ]
+      );
+
+      if (await columnExists("turak", "nev")) {
+        await dbPromise.query("UPDATE turak SET nev = ? WHERE id = ?", [
+          String(title).trim(),
+          tourId,
+        ]);
+      }
+
+      if (await columnExists("turak", "helyszin")) {
+        await dbPromise.query("UPDATE turak SET helyszin = ? WHERE id = ?", [
+          String(category).trim(),
+          tourId,
+        ]);
+      }
+
+      const statsJoinSql = await getTourStatsJoinSql();
+
+      const [rows] = await dbPromise.query(
+        `
+        SELECT
+          t.id,
+          t.slug,
+          t.cim,
+          t.rovid_leiras,
+          t.leiras,
+          t.kategoria,
+          t.nehezseg,
+          t.idotartam,
+          t.badge,
+          t.ar,
+          t.kep,
+          t.letszam_max,
+          t.aktiv,
+          t.created_at,
+          t.updated_at,
+          COALESCE(f.joined_count, 0) AS joined_count
+        FROM turak t
+        ${statsJoinSql}
+        WHERE t.id = ?
+        LIMIT 1
+        `,
+        [tourId]
+      );
+
+      res.json({
+        message: "Túra sikeresen frissítve!",
+        tour: mapTourRow(rows[0]),
+      });
+    } catch (error) {
+      console.error("❌ TOUR UPDATE HIBA:", error.message);
+      res.status(500).json({
+        error: error.message || "Nem sikerült frissíteni a túrát.",
       });
     }
   }
@@ -2226,7 +2760,7 @@ app.put(
 ===================================== */
 app.use((err, req, res, next) => {
   console.error("❌ ERROR:", err.message);
-  res.status(400).json({ error: err.message });
+  res.status(err.status || 400).json({ error: err.message || "Ismeretlen hiba" });
 });
 
 /* =====================================
