@@ -1,311 +1,360 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import "./Galeria.css";
 
-const trips = [
+const PLACES = [
   {
-    id: 1,
-    place: "Mátra",
-    region: "Magyarország",
-    year: "2025",
+    id: "matra",
+    title: "Mátra",
+    subtitle: "Magaslatok, fenyvesek, kilátók és a Kékes ikonikus hangulata.",
     images: [
-      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1400&q=80",
+      {
+        src: "https://eszakmatratura.hu/wp-content/uploads/Kekesteto-Matra-latnivalo-Eszak-Matra-tura.webp",
+        alt: "Mátra - Kékestető panoráma",
+        size: "tall",
+      },
+      {
+        src: "https://eszakmatratura.hu/wp-content/uploads/Sasto-01-Matra-latnivalo-Eszak-Matra-tura.webp",
+        alt: "Mátra - Sástó",
+        size: "medium",
+      },
+      {
+        src: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bc/K%C3%A9kestet%C5%912004.jpg/250px-K%C3%A9kestet%C5%912004.jpg",
+        alt: "Mátra - Kékestető",
+        size: "small",
+      },
     ],
   },
   {
-    id: 2,
-    place: "Balaton-felvidék",
-    region: "Magyarország",
-    year: "2025",
+    id: "balaton-felvidek",
+    title: "Balaton-felvidék",
+    subtitle: "Tanúhegyek, bazaltformák és az egyik legszebb magyar táj.",
     images: [
-      "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1493558103817-58b2924bce98?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1400&q=80",
+      {
+        src: "https://upload.wikimedia.org/wikipedia/commons/4/4a/Pliocene_Volcanoes_near_Lake_Balaton_in_Hungary.jpg",
+        alt: "Balaton-felvidék - tanúhegyek",
+        size: "medium",
+      },
+      {
+        src: "https://utazom.com/sites/default/files/u15/images/unnamed(4).jpg",
+        alt: "Balaton-felvidék - panoráma",
+        size: "small",
+      },
+      {
+        src: "https://blog.szallas.hu/wp-content/uploads/2018/11/hegyestu_shutterstock_754252984.jpg",
+        alt: "Balaton-felvidék - Hegyestű",
+        size: "tall",
+      },
     ],
   },
   {
-    id: 3,
-    place: "Bükk",
-    region: "Magyarország",
-    year: "2024",
+    id: "bukk",
+    title: "Bükk",
+    subtitle: "Vadregényes erdők, völgyek, sziklák és klasszikus bükki hangulat.",
     images: [
-      "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1502082553048-f009c37129b9?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1400&q=80",
+      {
+        src: "https://upload.wikimedia.org/wikipedia/commons/a/a8/Lilla_fromszeleta1.jpg",
+        alt: "Bükk - Lillafüred",
+        size: "tall",
+      },
+      {
+        src: "https://img0.oastatic.com/img2/57543791/max/variant.jpg",
+        alt: "Bükk - hegyvidéki táj",
+        size: "medium",
+      },
+      {
+        src: "https://utazaskatalogus.hu/wp-content/uploads/2020/12/utazaskatalogus-bukk-latnivalok-kirandulasok.jpg",
+        alt: "Bükk - kirándulóhely",
+        size: "small",
+      },
     ],
   },
   {
-    id: 4,
-    place: "Dunakanyar",
-    region: "Magyarország",
-    year: "2024",
+    id: "dunakanyar",
+    title: "Dunakanyar",
+    subtitle: "Kanyargó Duna, magas partfalak és ikonikus panorámák.",
     images: [
-      "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1400&q=80",
+      {
+        src: "https://cms.static.marquardmedia.hu/data/cikk/354/354904.1160x480.jpg",
+        alt: "Dunakanyar - panoráma",
+        size: "medium",
+      },
+      {
+        src: "https://setarepulesbudapest.hu/wp-content/uploads/2024/12/Gyonyoru_Dunakanyar_setarepules_web_3.jpg",
+        alt: "Dunakanyar - légi látkép",
+        size: "tall",
+      },
+      {
+        src: "https://blog.szallas.hu/wp-content/uploads/2017/10/dunakanyar_shutterstock_513725098.jpg",
+        alt: "Dunakanyar - tájkép",
+        size: "small",
+      },
     ],
   },
   {
-    id: 5,
-    place: "Mecsek",
-    region: "Magyarország",
-    year: "2024",
+    id: "mecsek",
+    title: "Mecsek",
+    subtitle: "Erdők, ösvények, kilátópontok és délies hangulat.",
     images: [
-      "https://images.unsplash.com/photo-1516483638261-f4dbaf036963?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&w=1400&q=80",
+      {
+        src: "https://www.turistamagazin.hu/media/thumbs/el/me/ny/elmenykavalkad-a-mecsek-keleti-tajain-60e8a238-7986679.jpg",
+        alt: "Mecsek - keleti tájak",
+        size: "medium",
+      },
+      {
+        src: "https://aktivkalandor.hu/wp-content/uploads/2024/04/New-Project-96.jpg",
+        alt: "Mecsek - kirándulóhely",
+        size: "small",
+      },
+      {
+        src: "https://i.szalas.hu/pois/3795/500x500/87630.jpg",
+        alt: "Mecsek - látnivaló",
+        size: "tall",
+      },
     ],
   },
   {
-    id: 6,
-    place: "Őrség",
-    region: "Magyarország",
-    year: "2023",
+    id: "orseg",
+    title: "Őrség",
+    subtitle: "Nyugodt falvak, rétek, erdők és különleges természetközeli világ.",
     images: [
-      "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=1400&q=80",
-      "https://images.unsplash.com/photo-1501550816-8c6d7b1b2b6b?auto=format&fit=crop&w=1400&q=80",
+      {
+        src: "https://csodalatosmagyarorszag.hu/wp-content/uploads/2020/07/szalafo-pityerszer-nepi-muemlekegyuttes-orseg-bringazas-csodalatosmagyarorszag-dronfoto1.jpg",
+        alt: "Őrség - Szalafő Pityerszer",
+        size: "tall",
+      },
+      {
+        src: "https://kep.index.hu/1/0/3412/34123/341233/34123319_2612917_bcd3f4b5a73cbcf762b96e4a4f8f269e_wm.jpg",
+        alt: "Őrség - tájkép",
+        size: "medium",
+      },
+      {
+        src: "https://csodalatosmagyarorszag.hu/wp-content/uploads/2024/11/orseg-szalafo-kirandulas-gyalogtura-osz-jegyvasarlas-csodalatosmagyarorszag.jpg",
+        alt: "Őrség - őszi gyalogtúra",
+        size: "small",
+      },
+    ],
+  },
+  {
+    id: "ausztria",
+    title: "Ausztria",
+    subtitle: "Grüner See az Eisenerzi-Alpok között, brutál alpesi panorámával.",
+    images: [
+      {
+        src: "https://kirandulastippek.hu/thumbnail//images/a-messnerin-es-a-gruner-see1.jpg?3072,2304,width",
+        alt: "Ausztria - Grüner See, Eisenerzi-Alpok",
+        size: "tall",
+      },
     ],
   },
 ];
 
 export default function Galeria() {
   const [activePlace, setActivePlace] = useState("Összes");
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [cardIndexes, setCardIndexes] = useState(
-    Object.fromEntries(trips.map((trip) => [trip.id, 0]))
-  );
+  const [activeIndex, setActiveIndex] = useState(null);
 
-  const filters = useMemo(
-    () => ["Összes", ...trips.map((trip) => trip.place)],
+  const places = useMemo(
+    () => ["Összes", ...PLACES.map((place) => place.title)],
     []
   );
 
-  const filteredTrips = useMemo(() => {
-    if (activePlace === "Összes") return trips;
-    return trips.filter((trip) => trip.place === activePlace);
-  }, [activePlace]);
+  const allImages = useMemo(() => {
+    return PLACES.flatMap((place) =>
+      place.images.map((image) => ({
+        ...image,
+        placeId: place.id,
+        placeTitle: place.title,
+        placeSubtitle: place.subtitle,
+      }))
+    );
+  }, []);
 
-  const changeCardImage = (tripId, direction, imageCount) => {
-    setCardIndexes((prev) => {
-      const current = prev[tripId] ?? 0;
-      const next =
-        direction === "next"
-          ? (current + 1) % imageCount
-          : (current - 1 + imageCount) % imageCount;
+  const filteredImages = useMemo(() => {
+    if (activePlace === "Összes") return allImages;
+    return allImages.filter((image) => image.placeTitle === activePlace);
+  }, [activePlace, allImages]);
 
-      return {
-        ...prev,
-        [tripId]: next,
-      };
+  useEffect(() => {
+    if (activeIndex === null) {
+      document.body.style.overflow = "";
+      return undefined;
+    }
+
+    if (!filteredImages.length) {
+      setActiveIndex(null);
+      return undefined;
+    }
+
+    if (activeIndex > filteredImages.length - 1) {
+      setActiveIndex(0);
+    }
+
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") setActiveIndex(null);
+
+      if (e.key === "ArrowRight") {
+        setActiveIndex((prev) => {
+          if (prev === null) return 0;
+          return (prev + 1) % filteredImages.length;
+        });
+      }
+
+      if (e.key === "ArrowLeft") {
+        setActiveIndex((prev) => {
+          if (prev === null) return 0;
+          return (prev - 1 + filteredImages.length) % filteredImages.length;
+        });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [activeIndex, filteredImages]);
+
+  const openLightbox = (index) => {
+    setActiveIndex(index);
+  };
+
+  const closeLightbox = () => {
+    setActiveIndex(null);
+  };
+
+  const prevImage = () => {
+    setActiveIndex((prev) => {
+      if (prev === null) return 0;
+      return (prev - 1 + filteredImages.length) % filteredImages.length;
     });
   };
 
-  const openLightbox = (trip, imageIndex) => {
-    setSelectedImage({
-      tripId: trip.id,
-      title: trip.place,
-      subtitle: `${trip.region} • ${trip.year}`,
-      images: trip.images,
-      currentIndex: imageIndex,
+  const nextImage = () => {
+    setActiveIndex((prev) => {
+      if (prev === null) return 0;
+      return (prev + 1) % filteredImages.length;
     });
   };
 
-  const changeLightboxImage = (direction) => {
-    setSelectedImage((prev) => {
-      if (!prev) return prev;
-
-      const count = prev.images.length;
-      const nextIndex =
-        direction === "next"
-          ? (prev.currentIndex + 1) % count
-          : (prev.currentIndex - 1 + count) % count;
-
-      return {
-        ...prev,
-        currentIndex: nextIndex,
-      };
-    });
-  };
+  const activeImage = activeIndex !== null ? filteredImages[activeIndex] : null;
 
   return (
-    <section className="gallery-page">
-      <div className="gallery-shell">
-        <div className="gallery-head">
-          <div>
-            <span className="gallery-badge">Eddigi túráink</span>
-            <h1>Galéria</h1>
-            <p>Lapozható túrakártyák, igényes mintaképekkel.</p>
-          </div>
+    <div className="explore-gallery-page">
+      <div className="explore-gallery-aurora explore-gallery-aurora-left" />
+      <div className="explore-gallery-aurora explore-gallery-aurora-right" />
+      <div className="explore-gallery-noise" />
 
-          <div className="gallery-filters">
-            {filters.map((filter) => (
-              <button
-                key={filter}
-                className={activePlace === filter ? "active" : ""}
-                onClick={() => setActivePlace(filter)}
-                type="button"
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
-        </div>
+      <section className="explore-gallery-hero">
+        <div className="explore-gallery-badge">EXPLORE. GALÉRIA</div>
 
-        <div className="gallery-cards">
-          {filteredTrips.map((trip) => {
-            const currentIndex = cardIndexes[trip.id] ?? 0;
-            const currentImage = trip.images[currentIndex];
+        <h1>Helyek ahol már jártunk</h1>
 
-            return (
-              <article className="gallery-card" key={trip.id}>
-                <div className="gallery-card-topbar" />
+        <p className="explore-gallery-lead">
+          Magyarország kedvenc helyei mellé bekerült egy alpesi kedvenc is.
+          Pinterestes hangulat, üveges EXPLORE dizájn, normális nagyítás és
+          helyszín szerinti szűrés.
+        </p>
+      </section>
 
-                <div className="gallery-image-wrap">
-                  <button
-                    className="gallery-main-image"
-                    onClick={() => openLightbox(trip, currentIndex)}
-                    type="button"
-                  >
-                    <img
-                      src={currentImage}
-                      alt={`${trip.place} ${currentIndex + 1}`}
-                    />
-                    <div className="gallery-main-overlay">
-                      <span>Nagyban megnyitás</span>
-                    </div>
-                  </button>
-
-                  <button
-                    className="gallery-nav gallery-nav-left"
-                    onClick={() =>
-                      changeCardImage(trip.id, "prev", trip.images.length)
-                    }
-                    aria-label="Előző kép"
-                    type="button"
-                  >
-                    <span>❮</span>
-                  </button>
-
-                  <button
-                    className="gallery-nav gallery-nav-right"
-                    onClick={() =>
-                      changeCardImage(trip.id, "next", trip.images.length)
-                    }
-                    aria-label="Következő kép"
-                    type="button"
-                  >
-                    <span>❯</span>
-                  </button>
-
-                  <div className="gallery-dots">
-                    {trip.images.map((_, index) => (
-                      <button
-                        key={index}
-                        type="button"
-                        className={`gallery-dot ${
-                          index === currentIndex ? "active" : ""
-                        }`}
-                        onClick={() =>
-                          setCardIndexes((prev) => ({
-                            ...prev,
-                            [trip.id]: index,
-                          }))
-                        }
-                        aria-label={`${index + 1}. kép`}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="gallery-card-body">
-                  <div className="gallery-meta">
-                    <span>{trip.region}</span>
-                    <span>•</span>
-                    <span>{trip.year}</span>
-                  </div>
-
-                  <h2>{trip.place}</h2>
-
-                  <div className="gallery-thumbs">
-                    {trip.images.map((image, index) => (
-                      <button
-                        key={index}
-                        className={`gallery-thumb ${
-                          index === currentIndex ? "active" : ""
-                        }`}
-                        type="button"
-                        onClick={() =>
-                          setCardIndexes((prev) => ({
-                            ...prev,
-                            [trip.id]: index,
-                          }))
-                        }
-                      >
-                        <img
-                          src={image}
-                          alt={`${trip.place} bélyegkép ${index + 1}`}
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </div>
-
-      {selectedImage && (
-        <div className="gallery-lightbox" onClick={() => setSelectedImage(null)}>
+      <section className="explore-gallery-filters">
+        {places.map((place) => (
           <button
-            className="gallery-lightbox-close"
-            onClick={() => setSelectedImage(null)}
             type="button"
+            key={place}
+            className={`explore-gallery-filter ${
+              activePlace === place ? "is-active" : ""
+            }`}
+            onClick={() => {
+              setActivePlace(place);
+              setActiveIndex(null);
+            }}
           >
-            ✕
+            {place}
+          </button>
+        ))}
+      </section>
+
+      <section className="explore-gallery-masonry">
+        {filteredImages.map((image, index) => (
+          <button
+            type="button"
+            key={`${image.placeId}-${index}-${image.src}`}
+            className={`explore-gallery-pin explore-gallery-pin-${image.size}`}
+            onClick={() => openLightbox(index)}
+          >
+            <img
+              src={image.src}
+              alt={image.alt}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
+
+            <div className="explore-gallery-pin-overlay">
+              <span>{image.placeTitle}</span>
+              <strong>{image.alt}</strong>
+            </div>
+          </button>
+        ))}
+      </section>
+
+      {activeImage && (
+        <div className="explore-gallery-lightbox" onClick={closeLightbox}>
+          <button
+            type="button"
+            className="explore-gallery-lightbox-close"
+            onClick={closeLightbox}
+            aria-label="Bezárás"
+          >
+            ×
           </button>
 
           <button
-            className="gallery-lightbox-arrow gallery-lightbox-arrow-left"
+            type="button"
+            className="explore-gallery-lightbox-nav explore-gallery-lightbox-prev"
             onClick={(e) => {
               e.stopPropagation();
-              changeLightboxImage("prev");
+              prevImage();
             }}
-            type="button"
             aria-label="Előző kép"
           >
-            <span>❮</span>
-          </button>
-
-          <button
-            className="gallery-lightbox-arrow gallery-lightbox-arrow-right"
-            onClick={(e) => {
-              e.stopPropagation();
-              changeLightboxImage("next");
-            }}
-            type="button"
-            aria-label="Következő kép"
-          >
-            <span>❯</span>
+            ‹
           </button>
 
           <div
-            className="gallery-lightbox-content"
+            className="explore-gallery-lightbox-content"
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={selectedImage.images[selectedImage.currentIndex]}
-              alt={selectedImage.title}
+              className="explore-gallery-lightbox-image"
+              src={activeImage.src}
+              alt={activeImage.alt}
+              referrerPolicy="no-referrer"
             />
-            <div className="gallery-lightbox-info">
-              <h3>{selectedImage.title}</h3>
-              <p>{selectedImage.subtitle}</p>
+
+            <div className="explore-gallery-lightbox-info">
+              <span>
+                {activeIndex + 1} / {filteredImages.length} • {activeImage.placeTitle}
+              </span>
+              <h3>{activeImage.alt}</h3>
+              <p>{activeImage.placeSubtitle}</p>
             </div>
           </div>
+
+          <button
+            type="button"
+            className="explore-gallery-lightbox-nav explore-gallery-lightbox-next"
+            onClick={(e) => {
+              e.stopPropagation();
+              nextImage();
+            }}
+            aria-label="Következő kép"
+          >
+            ›
+          </button>
         </div>
       )}
-    </section>
+    </div>
   );
 }

@@ -6,141 +6,698 @@ import { AuthContext } from "../components/AuthContext.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5050";
 
-const PRODUCT_FALLBACKS = {
-  "Hátizsák": {
-    image:
-      "https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?auto=format&fit=crop&w=1200&q=80",
-    names: [
-      "Osprey Atmos AG 50",
-      "Deuter Aircontact Core 45+10",
-      "Gregory Baltoro 65",
-      "Fjällräven Kajka 55",
-    ],
+const CURATED_PRODUCTS = [
+  {
+    match: ["deuter", "aircontact"],
+    name: "Deuter Aircontact Core 45+10 SL",
+    brand: "Deuter",
+    image: "/berles/deuter-aircontact-core-45-10-sl.jpg",
+    desc:
+      "Prémium többnapos trekking hátizsák állítható hordrendszerrel és kényelmes súlyelosztással.",
+    weightKg: 2.03,
+    rating: 4.8,
+    category: "Hátizsák",
   },
-  "Sátor": {
-    image:
-      "https://images.unsplash.com/photo-1504280390368-397dc1f76f8a?auto=format&fit=crop&w=1200&q=80",
-    names: [
-      "MSR Hubba Hubba 2",
-      "Big Agnes Copper Spur HV UL2",
-      "Marmot Tungsten 2P",
-      "Nordisk Oppland 2",
-    ],
+  {
+    match: ["osprey", "atmos"],
+    name: "Osprey Atmos AG 50",
+    brand: "Osprey",
+    image: "/berles/osprey-atmos-ag-50.jpg",
+    desc:
+      "Kényelmes, jól szellőző trekking hátizsák hosszabb túrákra és nagyobb terheléshez.",
+    weightKg: 1.96,
+    rating: 4.9,
+    category: "Hátizsák",
   },
-  "Hálózsák": {
-    image:
-      "https://images.unsplash.com/photo-1522163182402-834f871fd851?auto=format&fit=crop&w=1200&q=80",
-    names: [
-      "Marmot Trestles Elite Eco 20",
-      "Sea to Summit Trek TKII",
-      "Mountain Hardwear Bishop Pass 15",
-      "Deuter Orbit -5",
-    ],
+  {
+    match: ["gregory", "baltoro"],
+    name: "Gregory Baltoro 65",
+    brand: "Gregory",
+    image: "/berles/gregory-baltoro-65.jpg",
+    desc:
+      "Masszív túrahátizsák nagyobb felszereléshez, többnapos és nehezebb utakra.",
+    weightKg: 2.2,
+    rating: 4.8,
+    category: "Hátizsák",
   },
-  "Matrac": {
-    image:
-      "https://images.unsplash.com/photo-1523413651479-597eb2da0ad6?auto=format&fit=crop&w=1200&q=80",
-    names: [
-      "Therm-a-Rest NeoAir XLite",
-      "Sea to Summit Ether Light XT",
-      "Exped Ultra 3R",
-      "Nemo Tensor Trail",
-    ],
+  {
+    match: ["fjallraven", "kajka"],
+    name: "Fjällräven Kajka 55",
+    brand: "Fjällräven",
+    image: "/berles/fjallraven-kajka-55.jpg",
+    desc:
+      "Erős, tartós prémium hátizsák kiváló hordkényelemmel hosszabb túrákra.",
+    weightKg: 3.1,
+    rating: 4.7,
+    category: "Hátizsák",
   },
-  "Ruházat": {
-    image:
-      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1200&q=80",
-    names: [
-      "Salomon X Ultra 4 GTX",
-      "Mammut Ducan Mid GTX",
-      "Patagonia Torrentshell 3L",
-      "Arc'teryx Beta Jacket",
-    ],
+
+  {
+    match: ["msr", "hubba"],
+    name: "MSR Hubba Hubba 2",
+    brand: "MSR",
+    image: "/berles/msr-hubba-hubba-2.jpg",
+    desc:
+      "Könnyű, gyorsan felállítható két személyes sátor outdoor és trekking használatra.",
+    weightKg: 1.7,
+    rating: 4.8,
+    category: "Sátor",
   },
-  "Főzés": {
-    image:
-      "https://images.unsplash.com/photo-1528715471579-d1bcf0ba5e83?auto=format&fit=crop&w=1200&q=80",
-    names: [
-      "Jetboil Flash Cooking System",
-      "MSR PocketRocket Deluxe Kit",
-      "Primus Lite Plus",
-      "Trangia 27-3 UL",
-    ],
+  {
+    match: ["big agnes", "copper spur"],
+    name: "Big Agnes Copper Spur HV UL2",
+    brand: "Big Agnes",
+    image: "/berles/big-agnes-copper-spur-hv-ul2.jpg",
+    desc:
+      "Ultrakönnyű prémium sátor nagy belső térrel és kiváló pakolhatósággal.",
+    weightKg: 1.5,
+    rating: 4.9,
+    category: "Sátor",
   },
-  "Navigáció": {
-    image:
-      "https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=1200&q=80",
-    names: [
-      "Garmin eTrex Solar",
-      "Garmin GPSMAP 67",
-      "Suunto MC-2 Compass",
-      "Komoot Premium Route Pack",
-    ],
+  {
+    match: ["marmot", "tungsten"],
+    name: "Marmot Tungsten 2P",
+    brand: "Marmot",
+    image: "/berles/marmot-tungsten-2p.jpg",
+    desc:
+      "Stabil két személyes sátor, többnapos túrákra és változékony időjárásra.",
+    weightKg: 2.6,
+    rating: 4.7,
+    category: "Sátor",
   },
-  "Biztonság": {
-    image:
-      "https://images.unsplash.com/photo-1511497584788-876760111969?auto=format&fit=crop&w=1200&q=80",
-    names: [
-      "Petzl Actik Core",
-      "Black Diamond Spot 400-R",
-      "Lifesystems First Aid Pro",
-      "Garmin inReach Mini 2",
-    ],
+  {
+    match: ["nordisk", "oppland"],
+    name: "Nordisk Oppland 2",
+    brand: "Nordisk",
+    image: "/berles/nordisk-oppland-2.jpg",
+    desc:
+      "Prémium, aerodinamikus sátor jó időjárásállósággal és kényelmes belső térrel.",
+    weightKg: 2.9,
+    rating: 4.8,
+    category: "Sátor",
   },
-  "Víz": {
-    image:
-      "https://images.unsplash.com/photo-1602143407151-7111542de6e8?auto=format&fit=crop&w=1200&q=80",
-    names: [
-      "HydraPak Flux 1L",
-      "Nalgene Wide Mouth 1L",
-      "Katadyn BeFree Filter",
-      "CamelBak Crux Reservoir",
-    ],
+
+  {
+    match: ["marmot", "trestles"],
+    name: "Marmot Trestles Elite Eco 20",
+    brand: "Marmot",
+    image: "/berles/marmot-trestles-elite-eco-20.jpg",
+    desc:
+      "Meleg, jól pakolható hálózsák hűvösebb éjszakákra és általános outdoor használatra.",
+    weightKg: 1.5,
+    rating: 4.6,
+    category: "Hálózsák",
   },
-  "Trekking": {
-    image:
-      "https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=1200&q=80",
-    names: [
-      "Black Diamond Trail Cork",
-      "Leki Makalu FX Carbon",
-      "Komperdell Carbon C3",
-      "Helinox Passport TL",
-    ],
+  {
+    match: ["sea to summit", "trek"],
+    name: "Sea to Summit Trek TKII",
+    brand: "Sea to Summit",
+    image: "/berles/sea-to-summit-trek-tkii.jpg",
+    desc:
+      "Kényelmes, valós túrahálózsák jó szigeteléssel és kis csomagmérettel.",
+    weightKg: 1.3,
+    rating: 4.8,
+    category: "Hálózsák",
   },
-  default: {
-    image:
-      "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
-    names: [
-      "Prémium Outdoor Felszerelés",
-      "Trail Essential Gear",
-      "Expedition Ready Kit",
-      "Explore Pro Equipment",
-    ],
+  {
+    match: ["mountain hardwear", "bishop"],
+    name: "Mountain Hardwear Bishop Pass 15",
+    brand: "Mountain Hardwear",
+    image: "/berles/mountain-hardwear-bishop-pass-15.jpg",
+    desc:
+      "Hidegebb körülményekhez is megfelelő, minőségi hálózsák túrázáshoz.",
+    weightKg: 1.2,
+    rating: 4.7,
+    category: "Hálózsák",
   },
+  {
+    match: ["deuter", "orbit"],
+    name: "Deuter Orbit -5",
+    brand: "Deuter",
+    image: "/berles/deuter-orbit-5.jpg",
+    desc:
+      "Kompakt, meleg hálózsák hosszabb túrákhoz és hűvösebb időre.",
+    weightKg: 1.6,
+    rating: 4.6,
+    category: "Hálózsák",
+  },
+
+  {
+    match: ["therm-a-rest", "neoair"],
+    name: "Therm-a-Rest NeoAir XLite",
+    brand: "Therm-a-Rest",
+    image: "/berles/thermarest-neoair-xlite.jpg",
+    desc:
+      "Könnyű, prémium túramatrac kiváló hőszigeteléssel és kis csomagmérettel.",
+    weightKg: 0.37,
+    rating: 4.8,
+    category: "Matrac",
+  },
+  {
+    match: ["sea to summit", "ether light"],
+    name: "Sea to Summit Ether Light XT",
+    brand: "Sea to Summit",
+    image: "/berles/sea-to-summit-ether-light-xt.jpg",
+    desc:
+      "Kényelmes, vastag matrac túrázáshoz és könnyű táborozáshoz.",
+    weightKg: 0.49,
+    rating: 4.7,
+    category: "Matrac",
+  },
+  {
+    match: ["exped", "ultra"],
+    name: "Exped Ultra 3R",
+    brand: "Exped",
+    image: "/berles/exped-ultra-3r.jpg",
+    desc:
+      "Jó szigetelésű, könnyű túramatrac három évszakos használatra.",
+    weightKg: 0.46,
+    rating: 4.7,
+    category: "Matrac",
+  },
+  {
+    match: ["nemo", "tensor"],
+    name: "Nemo Tensor Trail",
+    brand: "Nemo",
+    image: "/berles/nemo-tensor-trail.jpg",
+    desc:
+      "Kompakt, kényelmes matrac trekkinghez és könnyebb felszereléshez.",
+    weightKg: 0.42,
+    rating: 4.6,
+    category: "Matrac",
+  },
+
+  {
+    match: ["salomon", "x ultra"],
+    name: "Salomon X Ultra 4 GTX",
+    brand: "Salomon",
+    image: "/berles/salomon-x-ultra-4-gtx.jpg",
+    desc:
+      "Valós túracipő stabilitással, jó tapadással és vízálló kialakítással.",
+    weightKg: 0.39,
+    rating: 4.8,
+    category: "Ruházat",
+  },
+  {
+    match: ["mammut", "ducan"],
+    name: "Mammut Ducan Mid GTX",
+    brand: "Mammut",
+    image: "/berles/mammut-ducan-mid-gtx.jpg",
+    desc:
+      "Kényelmes, magas szárú túrabakancs hosszabb terepes használatra.",
+    weightKg: 0.47,
+    rating: 4.7,
+    category: "Ruházat",
+  },
+  {
+    match: ["patagonia", "torrentshell"],
+    name: "Patagonia Torrentshell 3L",
+    brand: "Patagonia",
+    image: "/berles/patagonia-torrentshell-3l.jpg",
+    desc:
+      "Időjárásálló héjkabát túrázáshoz és változékony kültéri körülményekhez.",
+    weightKg: 0.4,
+    rating: 4.7,
+    category: "Ruházat",
+  },
+  {
+    match: ["arcteryx", "beta"],
+    name: "Arc'teryx Beta Jacket",
+    brand: "Arc'teryx",
+    image: "/berles/arcteryx-beta-jacket.jpg",
+    desc:
+      "Prémium outdoor kabát megbízható időjárásvédelemmel és tartós kialakítással.",
+    weightKg: 0.38,
+    rating: 4.8,
+    category: "Ruházat",
+  },
+
+  {
+    match: ["jetboil", "flash"],
+    name: "Jetboil Flash Cooking System",
+    brand: "Jetboil",
+    image: "/berles/jetboil-flash.jpg",
+    desc:
+      "Gyors forralásra tervezett kompakt főzőrendszer túrázáshoz és kempinghez.",
+    weightKg: 0.37,
+    rating: 4.7,
+    category: "Főzés",
+  },
+  {
+    match: ["msr", "pocketrocket"],
+    name: "MSR PocketRocket Deluxe Kit",
+    brand: "MSR",
+    image: "/berles/msr-pocketrocket-deluxe-kit.jpg",
+    desc:
+      "Könnyű, megbízható túrafőző rendszer gyors vízforraláshoz és főzéshez.",
+    weightKg: 0.28,
+    rating: 4.8,
+    category: "Főzés",
+  },
+  {
+    match: ["primus", "lite plus"],
+    name: "Primus Lite Plus",
+    brand: "Primus",
+    image: "/berles/primus-lite-plus.jpg",
+    desc:
+      "Kompakt főzőszett outdoor használatra, gyors forralással és jó csomagolhatósággal.",
+    weightKg: 0.4,
+    rating: 4.7,
+    category: "Főzés",
+  },
+  {
+    match: ["trangia", "27"],
+    name: "Trangia 27-3 UL",
+    brand: "Trangia",
+    image: "/berles/trangia-27-3-ul.jpg",
+    desc:
+      "Klasszikus, strapabíró túrafőző szett egyszerű kültéri használathoz.",
+    weightKg: 0.82,
+    rating: 4.6,
+    category: "Főzés",
+  },
+
+  {
+    match: ["garmin", "etrex"],
+    name: "Garmin eTrex Solar",
+    brand: "Garmin",
+    image: "/berles/garmin-etrex-solar.jpg",
+    desc:
+      "Valós kézi GPS pontos útvonalkövetéshez, hosszú üzemidővel és kültéri használatra.",
+    weightKg: 0.14,
+    rating: 4.8,
+    category: "Navigáció",
+  },
+  {
+    match: ["garmin", "gpsmap"],
+    name: "Garmin GPSMAP 67",
+    brand: "Garmin",
+    image: "/berles/garmin-gpsmap-67.jpg",
+    desc:
+      "Prémium kézi navigációs eszköz megbízható útvonalkövetéshez és outdoor használatra.",
+    weightKg: 0.23,
+    rating: 4.8,
+    category: "Navigáció",
+  },
+  {
+    match: ["suunto", "mc-2"],
+    name: "Suunto MC-2 Compass",
+    brand: "Suunto",
+    image: "/berles/suunto-mc-2-compass.jpg",
+    desc:
+      "Tartós és pontos tájoló klasszikus navigációhoz, túrázáshoz és tájfutáshoz.",
+    weightKg: 0.075,
+    rating: 4.6,
+    category: "Navigáció",
+  },
+  {
+    match: ["komoot"],
+    name: "Komoot Premium Route Pack",
+    brand: "Komoot",
+    image: "/berles/komoot-premium-route-pack.jpg",
+    desc:
+      "Útvonaltervezéshez és outdoor navigációhoz hasznos digitális csomag.",
+    weightKg: 0,
+    rating: 4.5,
+    category: "Navigáció",
+  },
+
+  {
+    match: ["petzl", "actik"],
+    name: "Petzl Actik Core",
+    brand: "Petzl",
+    image: "/berles/petzl-actik-core.jpg",
+    desc:
+      "Fejlámpa esti túrákhoz, kempingezéshez és biztonsági tartaléknak.",
+    weightKg: 0.088,
+    rating: 4.8,
+    category: "Biztonság",
+  },
+  {
+    match: ["black diamond", "spot"],
+    name: "Black Diamond Spot 400-R",
+    brand: "Black Diamond",
+    image: "/berles/black-diamond-spot-400-r.jpg",
+    desc:
+      "Erős fejlámpa jó fényerővel, kültéri és esti használatra.",
+    weightKg: 0.073,
+    rating: 4.7,
+    category: "Biztonság",
+  },
+  {
+    match: ["lifesystems", "first aid"],
+    name: "Lifesystems First Aid Pro",
+    brand: "Lifesystems",
+    image: "/berles/lifesystems-first-aid-pro.jpg",
+    desc:
+      "Alapvető elsősegély csomag túrázáshoz és vészhelyzeti használatra.",
+    weightKg: 0.5,
+    rating: 4.6,
+    category: "Biztonság",
+  },
+  {
+    match: ["inreach", "garmin"],
+    name: "Garmin inReach Mini 2",
+    brand: "Garmin",
+    image: "/berles/garmin-inreach-mini-2.jpg",
+    desc:
+      "Kommunikációs és biztonsági eszköz távolabbi túrákhoz és outdoor helyzetekhez.",
+    weightKg: 0.1,
+    rating: 4.8,
+    category: "Biztonság",
+  },
+
+  {
+    match: ["hydrapak", "flux"],
+    name: "HydraPak Flux 1L",
+    brand: "HydraPak",
+    image: "/berles/hydrapak-flux-1l.jpg",
+    desc:
+      "Könnyű, összenyomható kulacs túrázáshoz és gyors csomagoláshoz.",
+    weightKg: 0.102,
+    rating: 4.7,
+    category: "Víz",
+  },
+  {
+    match: ["nalgene", "wide mouth"],
+    name: "Nalgene Wide Mouth 1L",
+    brand: "Nalgene",
+    image: "/berles/nalgene-wide-mouth-1l.jpg",
+    desc:
+      "Strapabíró klasszikus kulacs mindennapi és outdoor használatra.",
+    weightKg: 0.18,
+    rating: 4.7,
+    category: "Víz",
+  },
+  {
+    match: ["katadyn", "befree"],
+    name: "Katadyn BeFree Filter",
+    brand: "Katadyn",
+    image: "/berles/katadyn-befree-filter.jpg",
+    desc:
+      "Praktikus vízszűrő kültéri vízkezeléshez és túrázáshoz.",
+    weightKg: 0.063,
+    rating: 4.7,
+    category: "Víz",
+  },
+  {
+    match: ["camelbak", "crux"],
+    name: "CamelBak Crux Reservoir",
+    brand: "CamelBak",
+    image: "/berles/camelbak-crux-reservoir.jpg",
+    desc:
+      "Hydration rendszer hosszabb túrákhoz és folyamatos vízutánpótláshoz.",
+    weightKg: 0.21,
+    rating: 4.6,
+    category: "Víz",
+  },
+
+  {
+    match: ["black diamond", "trail cork"],
+    name: "Black Diamond Trail Cork",
+    brand: "Black Diamond",
+    image: "/berles/black-diamond-trail-cork.jpg",
+    desc:
+      "Állítható túrabot stabilitáshoz, kényelmes markolattal és jó terhelhetőséggel.",
+    weightKg: 0.49,
+    rating: 4.7,
+    category: "Trekking",
+  },
+  {
+    match: ["leki", "makalu"],
+    name: "Leki Makalu FX Carbon",
+    brand: "Leki",
+    image: "/berles/leki-makalu-fx-carbon.jpg",
+    desc:
+      "Könnyű karbon túrabot technikás terepre és hosszabb túrákra.",
+    weightKg: 0.51,
+    rating: 4.8,
+    category: "Trekking",
+  },
+  {
+    match: ["komperdell", "carbon c3"],
+    name: "Komperdell Carbon C3",
+    brand: "Komperdell",
+    image: "/berles/komperdell-carbon-c3.jpg",
+    desc:
+      "Masszív, prémium trekking bot jó csillapítással és stabil fogással.",
+    weightKg: 0.48,
+    rating: 4.7,
+    category: "Trekking",
+  },
+  {
+    match: ["helinox", "passport"],
+    name: "Helinox Passport TL",
+    brand: "Helinox",
+    image: "/berles/helinox-passport-tl.jpg",
+    desc:
+      "Könnyű, kompakt túrabot utazáshoz és általános outdoor használatra.",
+    weightKg: 0.44,
+    rating: 4.6,
+    category: "Trekking",
+  },
+];
+
+const CATEGORY_FALLBACKS = {
+  Hátizsák: [
+    {
+      name: "Deuter Aircontact Core 45+10 SL",
+      brand: "Deuter",
+      image: "/berles/deuter-aircontact-core-45-10-sl.jpg",
+      desc:
+        "Prémium trekking hátizsák állítható hordrendszerrel és kényelmes súlyelosztással.",
+      weightKg: 2.03,
+      rating: 4.8,
+    },
+    {
+      name: "Osprey Atmos AG 50",
+      brand: "Osprey",
+      image: "/berles/osprey-atmos-ag-50.jpg",
+      desc:
+        "Kényelmes, jól szellőző trekking hátizsák hosszabb túrákra.",
+      weightKg: 1.96,
+      rating: 4.9,
+    },
+  ],
+  Sátor: [
+    {
+      name: "MSR Hubba Hubba 2",
+      brand: "MSR",
+      image: "/berles/msr-hubba-hubba-2.jpg",
+      desc:
+        "Könnyű, gyorsan felállítható két személyes sátor outdoor használatra.",
+      weightKg: 1.7,
+      rating: 4.8,
+    },
+    {
+      name: "Marmot Tungsten 2P",
+      brand: "Marmot",
+      image: "/berles/marmot-tungsten-2p.jpg",
+      desc: "Stabil két személyes sátor többnapos túrákra.",
+      weightKg: 2.6,
+      rating: 4.7,
+    },
+  ],
+  Hálózsák: [
+    {
+      name: "Sea to Summit Trek TKII",
+      brand: "Sea to Summit",
+      image: "/berles/sea-to-summit-trek-tkii.jpg",
+      desc:
+        "Kényelmes, valós túrahálózsák jó szigeteléssel és kis csomagmérettel.",
+      weightKg: 1.3,
+      rating: 4.8,
+    },
+    {
+      name: "Marmot Trestles Elite Eco 20",
+      brand: "Marmot",
+      image: "/berles/marmot-trestles-elite-eco-20.jpg",
+      desc: "Meleg hálózsák hűvösebb éjszakákra.",
+      weightKg: 1.5,
+      rating: 4.6,
+    },
+  ],
+  Matrac: [
+    {
+      name: "Therm-a-Rest NeoAir XLite",
+      brand: "Therm-a-Rest",
+      image: "/berles/thermarest-neoair-xlite.jpg",
+      desc: "Könnyű túramatrac kiváló hőszigeteléssel.",
+      weightKg: 0.37,
+      rating: 4.8,
+    },
+    {
+      name: "Sea to Summit Ether Light XT",
+      brand: "Sea to Summit",
+      image: "/berles/sea-to-summit-ether-light-xt.jpg",
+      desc: "Kényelmes, vastag matrac trekkinghez és táborozáshoz.",
+      weightKg: 0.49,
+      rating: 4.7,
+    },
+  ],
+  Ruházat: [
+    {
+      name: "Salomon X Ultra 4 GTX",
+      brand: "Salomon",
+      image: "/berles/salomon-x-ultra-4-gtx.jpg",
+      desc: "Valós túracipő stabilitással és jó tapadással.",
+      weightKg: 0.39,
+      rating: 4.8,
+    },
+    {
+      name: "Patagonia Torrentshell 3L",
+      brand: "Patagonia",
+      image: "/berles/patagonia-torrentshell-3l.jpg",
+      desc: "Időjárásálló outdoor kabát változékony körülményekhez.",
+      weightKg: 0.4,
+      rating: 4.7,
+    },
+  ],
+  Főzés: [
+    {
+      name: "Jetboil Flash Cooking System",
+      brand: "Jetboil",
+      image: "/berles/jetboil-flash.jpg",
+      desc: "Gyors forralásra tervezett kompakt főzőrendszer.",
+      weightKg: 0.37,
+      rating: 4.7,
+    },
+    {
+      name: "MSR PocketRocket Deluxe Kit",
+      brand: "MSR",
+      image: "/berles/msr-pocketrocket-deluxe-kit.jpg",
+      desc: "Könnyű túrafőző rendszer gyors forraláshoz.",
+      weightKg: 0.28,
+      rating: 4.8,
+    },
+  ],
+  Navigáció: [
+    {
+      name: "Garmin eTrex Solar",
+      brand: "Garmin",
+      image: "/berles/garmin-etrex-solar.jpg",
+      desc: "Valós kézi GPS kültéri navigációhoz.",
+      weightKg: 0.14,
+      rating: 4.8,
+    },
+    {
+      name: "Suunto MC-2 Compass",
+      brand: "Suunto",
+      image: "/berles/suunto-mc-2-compass.jpg",
+      desc: "Pontos és tartós tájoló klasszikus navigációhoz.",
+      weightKg: 0.075,
+      rating: 4.6,
+    },
+  ],
+  Biztonság: [
+    {
+      name: "Petzl Actik Core",
+      brand: "Petzl",
+      image: "/berles/petzl-actik-core.jpg",
+      desc: "Fejlámpa esti túrákhoz és biztonsági tartaléknak.",
+      weightKg: 0.088,
+      rating: 4.8,
+    },
+    {
+      name: "Lifesystems First Aid Pro",
+      brand: "Lifesystems",
+      image: "/berles/lifesystems-first-aid-pro.jpg",
+      desc: "Alap elsősegély csomag túrázáshoz.",
+      weightKg: 0.5,
+      rating: 4.6,
+    },
+  ],
+  Víz: [
+    {
+      name: "HydraPak Flux 1L",
+      brand: "HydraPak",
+      image: "/berles/hydrapak-flux-1l.jpg",
+      desc: "Könnyű, összenyomható kulacs outdoor használatra.",
+      weightKg: 0.102,
+      rating: 4.7,
+    },
+    {
+      name: "Nalgene Wide Mouth 1L",
+      brand: "Nalgene",
+      image: "/berles/nalgene-wide-mouth-1l.jpg",
+      desc: "Strapabíró kulacs mindennapi túrázáshoz.",
+      weightKg: 0.18,
+      rating: 4.7,
+    },
+  ],
+  Trekking: [
+    {
+      name: "Black Diamond Trail Cork",
+      brand: "Black Diamond",
+      image: "/berles/black-diamond-trail-cork.jpg",
+      desc: "Állítható túrabot stabilitáshoz és kényelmes fogáshoz.",
+      weightKg: 0.49,
+      rating: 4.7,
+    },
+    {
+      name: "Leki Makalu FX Carbon",
+      brand: "Leki",
+      image: "/berles/leki-makalu-fx-carbon.jpg",
+      desc: "Könnyű karbon túrabot technikás terepre.",
+      weightKg: 0.51,
+      rating: 4.8,
+    },
+  ],
+  default: [
+    {
+      name: "Prémium outdoor felszerelés",
+      brand: "EXPLORE",
+      image: "/berles/default-outdoor-gear.jpg",
+      desc:
+        "Minőségi outdoor felszerelés túrához, természetjáráshoz és táborozáshoz.",
+      weightKg: 1,
+      rating: 4.6,
+    },
+  ],
 };
 
 const CATEGORY_DESCRIPTIONS = {
-  "Hátizsák":
+  Hátizsák:
     "Kényelmes, hosszabb túrákra tervezett prémium hátizsák állítható hordrendszerrel.",
-  "Sátor":
+  Sátor:
     "Stabil, időjárásálló sátor többnapos outdoor használatra, gyors felállítással.",
-  "Hálózsák":
+  Hálózsák:
     "Kompakt, meleg hálózsák túrázáshoz és hűvösebb éjszakákhoz.",
-  "Matrac":
+  Matrac:
     "Könnyű, kényelmes matrac jobb hőszigeteléssel és kis csomagmérettel.",
-  "Ruházat":
+  Ruházat:
     "Technikai outdoor ruházat és lábbeli változó terepre és időjárásra.",
-  "Főzés":
+  Főzés:
     "Kompakt túrafőző szett gyors forraláshoz és megbízható kültéri használatra.",
-  "Navigáció":
+  Navigáció:
     "Navigációs eszközök pontos útvonalkövetéshez és biztos tájékozódáshoz.",
-  "Biztonság":
+  Biztonság:
     "Alapvető biztonsági felszerelés esti, nehéz vagy vészhelyzeti használatra.",
-  "Víz":
+  Víz:
     "Ivóvíz szállítására és szűrésére alkalmas praktikus felszerelés.",
-  "Trekking":
+  Trekking:
     "Stabilitást és kényelmet adó trekking felszerelés nehezebb terepre is.",
 };
+
+const GENERIC_NAME_PATTERNS = [
+  /^prémium outdoor/i,
+  /^trail essential/i,
+  /^expedition ready/i,
+  /^explore pro/i,
+  /^outdoor felszerelés$/i,
+  /^felszerelés$/i,
+  /^termék$/i,
+  /^hátizsák$/i,
+  /^sátor$/i,
+  /^hálózsák$/i,
+  /^matrac$/i,
+  /^ruházat$/i,
+  /^főzés$/i,
+  /^navigáció$/i,
+  /^biztonság$/i,
+  /^víz$/i,
+  /^trekking$/i,
+];
 
 const fmtFt = (n) =>
   `${new Intl.NumberFormat("hu-HU").format(Number(n || 0))} Ft`;
@@ -164,28 +721,102 @@ function addDays(dateStr, days) {
   return d.toISOString().slice(0, 10);
 }
 
+function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function normalizeText(value = "") {
+  return String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function looksLikeUrl(value = "") {
+  const raw = String(value || "").trim().toLowerCase();
+  return raw.startsWith("http://") || raw.startsWith("https://");
+}
+
+function normalizeImage(src) {
+  if (!src) return "";
+  const value = String(src).trim();
+  if (!value) return "";
+
+  if (value.startsWith("http://") || value.startsWith("https://")) return value;
+  if (value.startsWith("/uploads/")) return `${API_BASE}${value}`;
+  if (value.startsWith("uploads/")) return `${API_BASE}/${value}`;
+  if (value.startsWith("/")) return value;
+
+  return value;
+}
+
+function isGenericName(name) {
+  if (!name || !String(name).trim()) return true;
+  return GENERIC_NAME_PATTERNS.some((pattern) =>
+    pattern.test(String(name).trim())
+  );
+}
+
+function getCategoryFallback(category, index = 0) {
+  const list = CATEGORY_FALLBACKS[category] || CATEGORY_FALLBACKS.default;
+  return list[index % list.length];
+}
+
+function findCuratedProduct(row, index = 0) {
+  const haystack = normalizeText(
+    `${row?.nev || ""} ${row?.marka || ""} ${row?.kategoria || ""} ${
+      row?.leiras || ""
+    }`
+  );
+
+  const exact = CURATED_PRODUCTS.find((product) =>
+    product.match.every((part) => haystack.includes(normalizeText(part)))
+  );
+
+  if (exact) return exact;
+
+  return getCategoryFallback(row?.kategoria || "default", index);
+}
+
 function enhanceProduct(row, index = 0) {
   const category = row.kategoria || "Egyéb";
-  const fallback = PRODUCT_FALLBACKS[category] || PRODUCT_FALLBACKS.default;
-  const fallbackName =
-    fallback.names[index % fallback.names.length] || fallback.names[0];
+  const curated = findCuratedProduct(row, index);
+
+  const rawName =
+    row.nev && String(row.nev).trim() ? String(row.nev).trim() : "";
+  const rawBrand =
+    row.marka && String(row.marka).trim() ? String(row.marka).trim() : "";
+  const rawDesc =
+    row.leiras && String(row.leiras).trim() ? String(row.leiras).trim() : "";
+  const rawImage =
+    row.kep && String(row.kep).trim() ? String(row.kep).trim() : "";
+
+  const cleanedDesc = rawDesc && !looksLikeUrl(rawDesc) ? rawDesc : "";
+  const resolvedImage = normalizeImage(rawImage) || curated.image;
 
   return {
     id: Number(row.id),
-    name: row.nev && String(row.nev).trim() ? row.nev : fallbackName,
+    name: isGenericName(rawName) ? curated.name : rawName,
     category,
-    brand: row.marka || "Outdoor",
+    brand: rawBrand || curated.brand || "Outdoor",
     pricePerDay: Number(row.ar_per_nap || 0),
-    rating: Number(row.ertekeles || 0),
-    weightKg: Number(row.suly_kg || 0),
-    img: row.kep && String(row.kep).trim() ? row.kep : fallback.image,
+    rating: Number(row.ertekeles || curated.rating || 0),
+    weightKg: Number(row.suly_kg || curated.weightKg || 0),
+    img: resolvedImage,
     desc:
-      row.leiras && String(row.leiras).trim()
-        ? row.leiras
-        : CATEGORY_DESCRIPTIONS[category] || CATEGORY_DESCRIPTIONS["Trekking"],
+      cleanedDesc ||
+      curated.desc ||
+      CATEGORY_DESCRIPTIONS[category] ||
+      CATEGORY_DESCRIPTIONS.Trekking,
     darabszam: Number(row.darabszam || 0),
-    aktiv: !!row.aktiv,
-    fallbackImage: fallback.image,
+    aktiv: row.aktiv === undefined ? true : !!row.aktiv,
+    fallbackImage: curated.image,
   };
 }
 
@@ -213,7 +844,10 @@ export default function Berles() {
   const [durationDays, setDurationDays] = useState(1);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
-  const vege = useMemo(() => addDays(kezd, durationDays - 1), [kezd, durationDays]);
+  const vege = useMemo(
+    () => addDays(kezd, durationDays - 1),
+    [kezd, durationDays]
+  );
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -229,7 +863,9 @@ export default function Berles() {
         );
       }
 
-      setItems(Array.isArray(data) ? data.map((row, i) => enhanceProduct(row, i)) : []);
+      setItems(
+        Array.isArray(data) ? data.map((row, i) => enhanceProduct(row, i)) : []
+      );
     } catch (err) {
       setItems([]);
       setLoadError(
@@ -271,7 +907,7 @@ export default function Berles() {
     const query = q.trim().toLowerCase();
 
     let out = items.filter((it) => {
-      const available = it.darabszam > 0;
+      const available = it.aktiv && it.darabszam > 0;
 
       if (onlyAvail && !available) return false;
       if (cat !== "Összes" && it.category !== cat) return false;
@@ -330,7 +966,8 @@ export default function Berles() {
   );
 
   const totalPrice = useMemo(
-    () => cartDetailed.reduce((sum, item) => sum + Number(item.lineTotal || 0), 0),
+    () =>
+      cartDetailed.reduce((sum, item) => sum + Number(item.lineTotal || 0), 0),
     [cartDetailed]
   );
 
@@ -351,7 +988,7 @@ export default function Berles() {
   };
 
   const addToCart = (item) => {
-    if (item.darabszam <= 0) return;
+    if (item.darabszam <= 0 || !item.aktiv) return;
 
     setCart((prev) => {
       const existing = prev.find((x) => x.termekId === item.id);
@@ -416,6 +1053,40 @@ export default function Berles() {
   };
 
   const clearCart = () => setCart([]);
+
+  const openProductDetails = (it) => {
+    const safeName = escapeHtml(it.name);
+    const safeCategory = escapeHtml(it.category);
+    const safeBrand = escapeHtml(it.brand);
+    const safeDesc = escapeHtml(it.desc);
+    const safeImg = escapeHtml(it.img || it.fallbackImage);
+
+    Swal.fire({
+      title: safeName,
+      width: 760,
+      html: `
+        <div style="display:grid;grid-template-columns:220px 1fr;gap:18px;align-items:start;text-align:left;">
+          <div>
+            <img
+              src="${safeImg}"
+              alt="${safeName}"
+              style="width:100%;height:220px;object-fit:cover;border-radius:16px;display:block;background:#09110d;"
+            />
+          </div>
+          <div style="line-height:1.75;">
+            <div><strong>Kategória:</strong> ${safeCategory}</div>
+            <div><strong>Márka:</strong> ${safeBrand}</div>
+            <div><strong>Ár / nap:</strong> ${fmtFt(it.pricePerDay)}</div>
+            <div><strong>Értékelés:</strong> ${Number(it.rating || 0).toFixed(1)}</div>
+            <div><strong>Súly:</strong> ${Number(it.weightKg || 0)} kg</div>
+            <div><strong>Készlet:</strong> ${it.darabszam} db</div>
+            <div style="margin-top:10px;"><strong>Leírás:</strong><br/>${safeDesc}</div>
+          </div>
+        </div>
+      `,
+      confirmButtonText: "Bezárás",
+    });
+  };
 
   const handleCheckout = async () => {
     if (!token) {
@@ -513,7 +1184,8 @@ export default function Berles() {
             <span className="berles-kicker">EXPLORE • Bérlés</span>
             <h1>Felszerelés bérlés</h1>
             <p>
-              Valós outdoor termékek, normális képek, egyszerű időtartam-választás és tovább a fizetésre.
+              Valós outdoor termékek, termékhez tartozó képek, egyszerű időtartam-választás
+              és tovább a fizetésre.
             </p>
           </div>
         </section>
@@ -634,7 +1306,7 @@ export default function Berles() {
             ) : (
               <div className="products-grid">
                 {filtered.map((it) => {
-                  const available = it.darabszam > 0;
+                  const available = it.aktiv && it.darabszam > 0;
 
                   return (
                     <article
@@ -646,6 +1318,7 @@ export default function Berles() {
                           src={it.img}
                           alt={it.name}
                           className="product-image"
+                          loading="lazy"
                           onError={(e) => {
                             e.currentTarget.src = it.fallbackImage;
                           }}
@@ -671,7 +1344,7 @@ export default function Berles() {
                           </div>
                           <div>
                             <small>Értékelés</small>
-                            <strong>⭐ {it.rating.toFixed(1)}</strong>
+                            <strong>⭐ {Number(it.rating || 0).toFixed(1)}</strong>
                           </div>
                           <div>
                             <small>Készlet</small>
@@ -683,22 +1356,7 @@ export default function Berles() {
                           <button
                             className="btn btn-secondary"
                             type="button"
-                            onClick={() =>
-                              Swal.fire({
-                                title: it.name,
-                                html: `
-                                  <div style="text-align:left;line-height:1.7">
-                                    <div><strong>Kategória:</strong> ${it.category}</div>
-                                    <div><strong>Márka:</strong> ${it.brand}</div>
-                                    <div><strong>Ár / nap:</strong> ${fmtFt(it.pricePerDay)}</div>
-                                    <div><strong>Értékelés:</strong> ${it.rating.toFixed(1)}</div>
-                                    <div><strong>Súly:</strong> ${it.weightKg} kg</div>
-                                    <div><strong>Készlet:</strong> ${it.darabszam} db</div>
-                                    <div style="margin-top:10px;"><strong>Leírás:</strong><br/>${it.desc}</div>
-                                  </div>
-                                `,
-                              })
-                            }
+                            onClick={() => openProductDetails(it)}
                           >
                             Részletek
                           </button>
@@ -782,41 +1440,68 @@ export default function Berles() {
             ) : (
               <div className="cart-items">
                 {cartDetailed.map((item) => (
-                  <div key={item.termekId} className="cart-item">
-                    <div className="cart-item-top">
-                      <strong>{item.product.name}</strong>
-                      <button
-                        type="button"
-                        className="remove-link"
-                        onClick={() => removeCartItem(item.termekId)}
-                      >
-                        Törlés
-                      </button>
-                    </div>
+                  <div
+                    key={item.termekId}
+                    className="cart-item"
+                    style={{
+                      display: "flex",
+                      gap: "12px",
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <img
+                      src={item.product.img}
+                      alt={item.product.name}
+                      onError={(e) => {
+                        e.currentTarget.src = item.product.fallbackImage;
+                      }}
+                      style={{
+                        width: "72px",
+                        height: "72px",
+                        objectFit: "cover",
+                        borderRadius: "14px",
+                        flexShrink: 0,
+                        background: "#08110d",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                      }}
+                    />
 
-                    <div className="cart-item-meta">
-                      {item.product.brand} • {fmtFt(item.product.pricePerDay)} / nap
-                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="cart-item-top">
+                        <strong>{item.product.name}</strong>
+                        <button
+                          type="button"
+                          className="remove-link"
+                          onClick={() => removeCartItem(item.termekId)}
+                        >
+                          Törlés
+                        </button>
+                      </div>
 
-                    <div className="cart-qty-row">
-                      <button
-                        type="button"
-                        className="qty-btn"
-                        onClick={() => decreaseCartItem(item.termekId)}
-                      >
-                        −
-                      </button>
-                      <span>{item.mennyiseg} db</span>
-                      <button
-                        type="button"
-                        className="qty-btn"
-                        onClick={() => increaseCartItem(item.termekId)}
-                      >
-                        +
-                      </button>
-                    </div>
+                      <div className="cart-item-meta">
+                        {item.product.brand} • {fmtFt(item.product.pricePerDay)} / nap
+                      </div>
 
-                    <div className="cart-line-total">{fmtFt(item.lineTotal)}</div>
+                      <div className="cart-qty-row">
+                        <button
+                          type="button"
+                          className="qty-btn"
+                          onClick={() => decreaseCartItem(item.termekId)}
+                        >
+                          −
+                        </button>
+                        <span>{item.mennyiseg} db</span>
+                        <button
+                          type="button"
+                          className="qty-btn"
+                          onClick={() => increaseCartItem(item.termekId)}
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      <div className="cart-line-total">{fmtFt(item.lineTotal)}</div>
+                    </div>
                   </div>
                 ))}
               </div>

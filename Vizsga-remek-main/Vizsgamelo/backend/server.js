@@ -20,9 +20,14 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
    UPLOADS FOLDER
 ===================================== */
 const UPLOAD_DIR = path.join(__dirname, "uploads");
+const BERLES_UPLOAD_DIR = path.join(UPLOAD_DIR, "berles");
 
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+if (!fs.existsSync(BERLES_UPLOAD_DIR)) {
+  fs.mkdirSync(BERLES_UPLOAD_DIR, { recursive: true });
 }
 
 app.use("/uploads", express.static(UPLOAD_DIR));
@@ -73,6 +78,83 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;");
 }
 
+function formatMoneyHu(value) {
+  return `${Number(value || 0).toLocaleString("hu-HU")} Ft`;
+}
+
+function toLocalSqlDate(dateObj) {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const day = String(dateObj.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getFutureSqlDate(days = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + Number(days || 0));
+  return toLocalSqlDate(d);
+}
+
+function formatDateHu(value) {
+  if (!value) return "—";
+  const d = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return String(value);
+
+  return new Intl.DateTimeFormat("hu-HU", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(d);
+}
+
+function normalizePaymentMethod(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (["helyszinen", "atutalas", "online"].includes(normalized)) {
+    return normalized;
+  }
+
+  return "helyszinen";
+}
+
+function getPaymentMethodLabel(value) {
+  if (value === "atutalas") return "Banki átutalás";
+  if (value === "online") {
+    return "Online fizetés (bankkártya / Apple Pay / Google Pay)";
+  }
+  return "Helyszíni fizetés";
+}
+
+function getPaymentStatusFromMethod(value) {
+  if (value === "atutalas") return "pending";
+  if (value === "online") return "pending";
+  return "unpaid";
+}
+
+function getPaymentStatusLabel(value) {
+  if (value === "pending") return "Fizetésre vár";
+  if (value === "paid") return "Kifizetve";
+  return "Helyszínen fizetendő";
+}
+
+function getTransferReference(bookingId) {
+  return `EXPLORE-${bookingId}`;
+}
+
+function getBankTransferConfig() {
+  return {
+    accountName: String(process.env.BANK_ACCOUNT_NAME || "EXPLORE").trim(),
+    bankName: String(process.env.BANK_NAME || "").trim(),
+    accountNumber: String(process.env.BANK_ACCOUNT_NUMBER || "").trim(),
+    iban: String(process.env.BANK_IBAN || "").trim(),
+    swift: String(process.env.BANK_SWIFT || "").trim(),
+    notice: String(
+      process.env.BANK_TRANSFER_NOTICE ||
+        "Kérlek, a közleménybe írd be a megadott utalási azonosítót."
+    ).trim(),
+  };
+}
+
 async function sendContactReplyEmail({ toEmail, toName, subject, adminReply }) {
   if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
     throw new Error("A levélküldéshez hiányzik a MAIL_USER vagy MAIL_PASS.");
@@ -111,6 +193,142 @@ ${process.env.MAIL_USER}`,
         <p style="margin-top: 18px;">Üdv,<br/><strong>${escapeHtml(
           fromName
         )}</strong></p>
+      </div>
+    `,
+  });
+}
+
+async function sendBookingConfirmationEmail({
+  toEmail,
+  toName,
+  bookingId,
+  tourTitle,
+  date,
+  people,
+  paymentMethod,
+  paymentStatus,
+  paymentAmount,
+  paymentReference,
+  paymentDueDate,
+  bankTransfer,
+}) {
+  if (!process.env.MAIL_USER || !process.env.MAIL_PASS) {
+    throw new Error(
+      "A visszaigazoló emailhez hiányzik a MAIL_USER vagy MAIL_PASS."
+    );
+  }
+
+  const fromName = process.env.MAIL_FROM_NAME || "EXPLORE";
+  const safeName = String(toName || "Vendég").trim() || "Vendég";
+  const safeTourTitle = String(tourTitle || "EXPLORE túra").trim();
+  const safeDate = formatDateHu(date);
+  const safePeople = Number(people || 1);
+  const paymentLabel = getPaymentMethodLabel(paymentMethod);
+  const paymentStatusLabel = getPaymentStatusLabel(paymentStatus);
+  const paymentAmountLabel = formatMoneyHu(paymentAmount);
+
+  const transferTextBlock =
+    paymentMethod === "atutalas"
+      ? `
+
+Átutalási adatok:
+Kedvezményezett: ${bankTransfer?.accountName || "—"}
+Bank: ${bankTransfer?.bankName || "—"}
+Számlaszám: ${bankTransfer?.accountNumber || "—"}
+IBAN: ${bankTransfer?.iban || "—"}
+SWIFT: ${bankTransfer?.swift || "—"}
+Közlemény: ${paymentReference || "—"}
+Határidő: ${formatDateHu(paymentDueDate)}
+Megjegyzés: ${bankTransfer?.notice || "—"}`
+      : "";
+
+  const transferHtmlBlock =
+    paymentMethod === "atutalas"
+      ? `
+        <div style="margin-top: 16px; padding: 16px; background: #f7fbf7; border: 1px solid #d9ead9; border-radius: 12px;">
+          <p style="margin: 0 0 8px;"><strong>Átutalási adatok</strong></p>
+          <p style="margin: 0 0 6px;"><strong>Kedvezményezett:</strong> ${escapeHtml(
+            bankTransfer?.accountName || "—"
+          )}</p>
+          <p style="margin: 0 0 6px;"><strong>Bank:</strong> ${escapeHtml(
+            bankTransfer?.bankName || "—"
+          )}</p>
+          <p style="margin: 0 0 6px;"><strong>Számlaszám:</strong> ${escapeHtml(
+            bankTransfer?.accountNumber || "—"
+          )}</p>
+          <p style="margin: 0 0 6px;"><strong>IBAN:</strong> ${escapeHtml(
+            bankTransfer?.iban || "—"
+          )}</p>
+          <p style="margin: 0 0 6px;"><strong>SWIFT:</strong> ${escapeHtml(
+            bankTransfer?.swift || "—"
+          )}</p>
+          <p style="margin: 0 0 6px;"><strong>Közlemény:</strong> ${escapeHtml(
+            paymentReference || "—"
+          )}</p>
+          <p style="margin: 0 0 6px;"><strong>Határidő:</strong> ${escapeHtml(
+            formatDateHu(paymentDueDate)
+          )}</p>
+          <p style="margin: 0;"><strong>Megjegyzés:</strong> ${escapeHtml(
+            bankTransfer?.notice || "—"
+          )}</p>
+        </div>
+      `
+      : "";
+
+  await mailTransporter.sendMail({
+    from: `"${fromName}" <${process.env.MAIL_USER}>`,
+    to: toEmail,
+    subject: `Foglalás visszaigazolás – ${safeTourTitle}`,
+    text: `Szia ${safeName}!
+
+Köszönjük a foglalást, sikeresen rögzítettük az adataidat.
+
+Foglalás azonosító: #${bookingId}
+Túra: ${safeTourTitle}
+Dátum: ${safeDate}
+Létszám: ${safePeople} fő
+Fizetési mód: ${paymentLabel}
+Fizetési állapot: ${paymentStatusLabel}
+Becsült végösszeg: ${paymentAmountLabel}${transferTextBlock}
+
+Hamarosan további információkat is küldünk.
+
+Üdv,
+${fromName}
+${process.env.MAIL_USER}`,
+    html: `
+      <div style="font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #111;">
+        <p>Szia ${escapeHtml(safeName)}!</p>
+        <p>Köszönjük a foglalást, sikeresen rögzítettük az adataidat.</p>
+
+        <div style="padding: 16px; background: #f4f8f4; border: 1px solid #dbe7db; border-radius: 12px;">
+          <p style="margin: 0 0 8px;"><strong>Foglalás azonosító:</strong> #${escapeHtml(
+            bookingId
+          )}</p>
+          <p style="margin: 0 0 8px;"><strong>Túra:</strong> ${escapeHtml(
+            safeTourTitle
+          )}</p>
+          <p style="margin: 0 0 8px;"><strong>Dátum:</strong> ${escapeHtml(
+            safeDate
+          )}</p>
+          <p style="margin: 0 0 8px;"><strong>Létszám:</strong> ${escapeHtml(
+            String(safePeople)
+          )} fő</p>
+          <p style="margin: 0 0 8px;"><strong>Fizetési mód:</strong> ${escapeHtml(
+            paymentLabel
+          )}</p>
+          <p style="margin: 0 0 8px;"><strong>Fizetési állapot:</strong> ${escapeHtml(
+            paymentStatusLabel
+          )}</p>
+          <p style="margin: 0;"><strong>Becsült végösszeg:</strong> ${escapeHtml(
+            paymentAmountLabel
+          )}</p>
+        </div>
+
+        ${transferHtmlBlock}
+
+        <p style="margin-top: 18px;">Hamarosan további információkat is küldünk.</p>
+        <p>Üdv,<br/><strong>${escapeHtml(fromName)}</strong></p>
       </div>
     `,
   });
@@ -416,13 +634,83 @@ function mapRentalRow(row) {
       row.suly_kg === null || typeof row.suly_kg === "undefined"
         ? null
         : Number(row.suly_kg),
-    kep:
-      row.kep ||
-      "https://images.unsplash.com/photo-1522163182402-834f871fd851?w=1400",
+    kep: row.kep || null,
     leiras: row.leiras || "",
     darabszam: Number(row.darabszam || 0),
     aktiv: !!row.aktiv,
   };
+}
+
+function parseBooleanInput(value, defaultValue = false) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (["1", "true", "igen", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "nem", "no", "off"].includes(normalized)) return false;
+
+  return defaultValue;
+}
+
+function parseNullableNumber(value) {
+  if (value === null || typeof value === "undefined") return null;
+
+  const clean = String(value).trim();
+  if (!clean) return null;
+
+  const parsed = Number(clean);
+  if (Number.isNaN(parsed)) return null;
+
+  return parsed;
+}
+
+function parseNonNegativeInt(value, defaultValue = 0) {
+  const parsed = Number(value);
+  if (Number.isNaN(parsed) || parsed < 0) return defaultValue;
+  return Math.floor(parsed);
+}
+
+function normalizeExternalOrUploadImage(value) {
+  const clean = String(value || "").trim();
+  if (!clean) return null;
+
+  if (
+    clean.startsWith("http://") ||
+    clean.startsWith("https://") ||
+    clean.startsWith("/uploads/")
+  ) {
+    return clean;
+  }
+
+  return null;
+}
+
+function getRentalImagePathFromRequest(req, fallback = null) {
+  const removeImage = parseBooleanInput(
+    req.body?.removeKep ?? req.body?.removeImage,
+    false
+  );
+
+  if (removeImage) {
+    return null;
+  }
+
+  if (req.file) {
+    return `/uploads/berles/${req.file.filename}`;
+  }
+
+  const bodyImage = normalizeExternalOrUploadImage(
+    req.body?.kep || req.body?.img || ""
+  );
+
+  if (bodyImage) {
+    return bodyImage;
+  }
+
+  return fallback || null;
 }
 
 /* =====================================
@@ -624,6 +912,11 @@ async function ensureFoglalasokTableShape() {
       rental VARCHAR(50) DEFAULT 'Nem',
       megjegyzes TEXT DEFAULT NULL,
       note TEXT DEFAULT NULL,
+      payment_method VARCHAR(50) DEFAULT 'helyszinen',
+      payment_status VARCHAR(50) DEFAULT 'unpaid',
+      payment_amount INT NOT NULL DEFAULT 0,
+      payment_reference VARCHAR(120) DEFAULT NULL,
+      payment_due_date DATE DEFAULT NULL,
       status VARCHAR(50) NOT NULL DEFAULT 'uj',
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -664,6 +957,11 @@ async function ensureFoglalasokTableShape() {
     ["rental", "VARCHAR(50) DEFAULT 'Nem'"],
     ["megjegyzes", "TEXT NULL"],
     ["note", "TEXT NULL"],
+    ["payment_method", "VARCHAR(50) DEFAULT 'helyszinen'"],
+    ["payment_status", "VARCHAR(50) DEFAULT 'unpaid'"],
+    ["payment_amount", "INT NOT NULL DEFAULT 0"],
+    ["payment_reference", "VARCHAR(120) NULL"],
+    ["payment_due_date", "DATE NULL"],
     ["status", "VARCHAR(50) NOT NULL DEFAULT 'uj'"],
     ["created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"],
     [
@@ -714,6 +1012,11 @@ async function ensureFoglalasokTableShape() {
         telefon = COALESCE(NULLIF(telefon, ''), NULLIF(foglalo_telefon, ''), NULLIF(phone, '')),
         foglalo_telefon = COALESCE(NULLIF(foglalo_telefon, ''), NULLIF(telefon, ''), NULLIF(phone, '')),
         phone = COALESCE(NULLIF(phone, ''), NULLIF(foglalo_telefon, ''), NULLIF(telefon, '')),
+        payment_method = COALESCE(NULLIF(payment_method, ''), 'helyszinen'),
+        payment_status = COALESCE(NULLIF(payment_status, ''), 'unpaid'),
+        payment_amount = COALESCE(payment_amount, 0),
+        payment_reference = NULLIF(payment_reference, ''),
+        payment_due_date = payment_due_date,
         status = COALESCE(NULLIF(status, ''), 'uj')
     `);
   } catch (error) {
@@ -940,15 +1243,30 @@ async function tryMigrateOldBerlesTable() {
   const oldCols = await getTableColumnsSet("berles");
   if (!oldCols.size) return;
 
-  const nevCol = pickExistingColumn(oldCols, ["nev", "cim", "name", "termek_nev"]);
+  const nevCol = pickExistingColumn(oldCols, [
+    "nev",
+    "cim",
+    "name",
+    "termek_nev",
+  ]);
   const katCol = pickExistingColumn(oldCols, ["kategoria", "category"]);
   const markaCol = pickExistingColumn(oldCols, ["marka", "brand"]);
-  const arCol = pickExistingColumn(oldCols, ["ar_per_nap", "napi_ar", "ar", "price"]);
+  const arCol = pickExistingColumn(oldCols, [
+    "ar_per_nap",
+    "napi_ar",
+    "ar",
+    "price",
+  ]);
   const ertekelesCol = pickExistingColumn(oldCols, ["ertekeles", "rating"]);
   const sulyCol = pickExistingColumn(oldCols, ["suly_kg", "suly", "weight"]);
   const kepCol = pickExistingColumn(oldCols, ["kep", "img", "image", "image_url"]);
   const leirasCol = pickExistingColumn(oldCols, ["leiras", "description"]);
-  const darabCol = pickExistingColumn(oldCols, ["darabszam", "keszlet", "stock", "db"]);
+  const darabCol = pickExistingColumn(oldCols, [
+    "darabszam",
+    "keszlet",
+    "stock",
+    "db",
+  ]);
   const aktivCol = pickExistingColumn(oldCols, ["aktiv", "active"]);
 
   const nevExpr = nullSafeExpr(nevCol, "'Termék'");
@@ -1157,23 +1475,47 @@ async function ensureTables() {
 /* =====================================
    MULTER
 ===================================== */
+function buildUploadFileName(file, prefix = "img") {
+  const ext = (path.extname(file.originalname || "") || ".jpg").toLowerCase();
+  const rawBase = path.basename(file.originalname || prefix, ext);
+  const safeBase = slugify(rawBase) || prefix;
+
+  return `${safeBase}-${Date.now()}-${Math.random()
+    .toString(16)
+    .slice(2, 10)}${ext}`;
+}
+
+function imageFileFilter(req, file, cb) {
+  if (!file.mimetype.startsWith("image/")) {
+    return cb(new Error("Csak képfájl tölthető fel!"));
+  }
+  cb(null, true);
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}_${Math.random().toString(16).slice(2)}${ext}`);
+    cb(null, buildUploadFileName(file, "avatar"));
+  },
+});
+
+const berlesStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, BERLES_UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    cb(null, buildUploadFileName(file, "berles"));
   },
 });
 
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) {
-      return cb(new Error("Csak képfájl tölthető fel!"));
-    }
-    cb(null, true);
-  },
+  fileFilter: imageFileFilter,
+});
+
+const uploadBerlesImage = multer({
+  storage: berlesStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: imageFileFilter,
 });
 
 /* =====================================
@@ -1216,7 +1558,8 @@ app.post("/api/contact", async (req, res) => {
     );
 
     return res.status(201).json({
-      message: "Köszönjük az üzenetedet! Hamarosan felvesszük veled a kapcsolatot.",
+      message:
+        "Köszönjük az üzenetedet! Hamarosan felvesszük veled a kapcsolatot.",
     });
   } catch (error) {
     console.error("❌ CONTACT HIBA:", error.message);
@@ -1357,8 +1700,42 @@ app.put(
     } catch (error) {
       console.error("❌ ADMIN CONTACT REPLY HIBA:", error);
       res.status(500).json({
-        error: error?.message || "Nem sikerült elmenteni és elküldeni a választ.",
+        error:
+          error?.message || "Nem sikerült elmenteni és elküldeni a választ.",
       });
+    }
+  }
+);
+
+app.delete(
+  "/api/admin/contact-messages/:id",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const messageId = Number(req.params.id);
+
+      if (!messageId || Number.isNaN(messageId)) {
+        return res.status(400).json({ error: "Érvénytelen üzenet azonosító!" });
+      }
+
+      const [existing] = await dbPromise.query(
+        "SELECT id FROM kapcsolat_uzenetek WHERE id = ? LIMIT 1",
+        [messageId]
+      );
+
+      if (!existing.length) {
+        return res.status(404).json({ error: "Az üzenet nem található!" });
+      }
+
+      await dbPromise.query("DELETE FROM kapcsolat_uzenetek WHERE id = ?", [
+        messageId,
+      ]);
+
+      res.json({ message: "Üzenet sikeresen törölve." });
+    } catch (error) {
+      console.error("❌ CONTACT DELETE HIBA:", error.message);
+      res.status(500).json({ error: "Nem sikerült törölni az üzenetet." });
     }
   }
 );
@@ -1474,6 +1851,376 @@ app.get("/api/berles-termekek", async (req, res) => {
   }
 });
 
+/* ===== ADMIN BÉRLÉS TERMÉKEK LISTA ===== */
+app.get(
+  "/api/admin/berles-termekek",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const [rows] = await dbPromise.query(`
+        SELECT
+          id,
+          nev,
+          kategoria,
+          marka,
+          ar_per_nap,
+          ertekeles,
+          suly_kg,
+          kep,
+          leiras,
+          darabszam,
+          aktiv,
+          created_at,
+          updated_at
+        FROM berles_termekek
+        ORDER BY id DESC
+      `);
+
+      res.json((rows || []).map(mapRentalRow));
+    } catch (error) {
+      console.error("❌ ADMIN BÉRLÉS LISTA HIBA:", error.message);
+      return res.status(500).json({ error: "Nem sikerült betölteni a termékeket." });
+    }
+  }
+);
+
+/* ===== ADMIN BÉRLÉS TERMÉK LÉTREHOZÁS ===== */
+app.post(
+  "/api/admin/berles-termekek",
+  authMiddleware,
+  adminMiddleware,
+  uploadBerlesImage.single("kep"),
+  async (req, res) => {
+    try {
+      const nev = String(req.body.nev || "").trim();
+      const kategoria = String(req.body.kategoria || "Egyéb").trim() || "Egyéb";
+      const marka = String(req.body.marka || "EXPLORE").trim() || "EXPLORE";
+      const leiras = String(req.body.leiras || "").trim() || null;
+
+      const arPerNap = parseNonNegativeInt(req.body.ar_per_nap, 0);
+      const darabszam = parseNonNegativeInt(req.body.darabszam, 0);
+      const aktiv = parseBooleanInput(req.body.aktiv, true) ? 1 : 0;
+
+      const ertekeles = parseNullableNumber(req.body.ertekeles);
+      const sulyKg = parseNullableNumber(req.body.suly_kg);
+      const kep = getRentalImagePathFromRequest(req, null);
+
+      if (!nev) {
+        return res.status(400).json({ error: "A termék neve kötelező!" });
+      }
+
+      if (ertekeles !== null && (ertekeles < 0 || ertekeles > 5)) {
+        return res.status(400).json({ error: "Az értékelés 0 és 5 között lehet." });
+      }
+
+      if (sulyKg !== null && sulyKg < 0) {
+        return res.status(400).json({ error: "A súly nem lehet negatív." });
+      }
+
+      const [insertResult] = await dbPromise.query(
+        `
+        INSERT INTO berles_termekek
+          (nev, kategoria, marka, ar_per_nap, ertekeles, suly_kg, kep, leiras, darabszam, aktiv)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          nev,
+          kategoria,
+          marka,
+          arPerNap,
+          ertekeles,
+          sulyKg,
+          kep,
+          leiras,
+          darabszam,
+          aktiv,
+        ]
+      );
+
+      const [rows] = await dbPromise.query(
+        `
+        SELECT
+          id,
+          nev,
+          kategoria,
+          marka,
+          ar_per_nap,
+          ertekeles,
+          suly_kg,
+          kep,
+          leiras,
+          darabszam,
+          aktiv
+        FROM berles_termekek
+        WHERE id = ?
+        LIMIT 1
+        `,
+        [insertResult.insertId]
+      );
+
+      return res.status(201).json({
+        message: "Bérlés termék sikeresen létrehozva!",
+        item: mapRentalRow(rows[0]),
+      });
+    } catch (error) {
+      console.error("❌ ADMIN BÉRLÉS CREATE HIBA:", error.message);
+      return res.status(500).json({
+        error: error.message || "Nem sikerült létrehozni a bérlés terméket.",
+      });
+    }
+  }
+);
+
+/* ===== ADMIN BÉRLÉS TERMÉK FRISSÍTÉS ===== */
+app.put(
+  "/api/admin/berles-termekek/:id",
+  authMiddleware,
+  adminMiddleware,
+  uploadBerlesImage.single("kep"),
+  async (req, res) => {
+    try {
+      const itemId = Number(req.params.id);
+
+      if (!itemId || Number.isNaN(itemId)) {
+        return res.status(400).json({ error: "Érvénytelen termék azonosító!" });
+      }
+
+      const [existingRows] = await dbPromise.query(
+        `
+        SELECT
+          id,
+          nev,
+          kategoria,
+          marka,
+          ar_per_nap,
+          ertekeles,
+          suly_kg,
+          kep,
+          leiras,
+          darabszam,
+          aktiv
+        FROM berles_termekek
+        WHERE id = ?
+        LIMIT 1
+        `,
+        [itemId]
+      );
+
+      if (!existingRows.length) {
+        return res.status(404).json({ error: "A termék nem található!" });
+      }
+
+      const existing = existingRows[0];
+      const hasBody = (field) =>
+        Object.prototype.hasOwnProperty.call(req.body || {}, field);
+
+      const nev = hasBody("nev")
+        ? String(req.body.nev || "").trim()
+        : String(existing.nev || "").trim();
+
+      const kategoria = hasBody("kategoria")
+        ? String(req.body.kategoria || "").trim() || "Egyéb"
+        : String(existing.kategoria || "Egyéb").trim();
+
+      const marka = hasBody("marka")
+        ? String(req.body.marka || "").trim() || "EXPLORE"
+        : String(existing.marka || "EXPLORE").trim();
+
+      const leiras = hasBody("leiras")
+        ? String(req.body.leiras || "").trim() || null
+        : existing.leiras || null;
+
+      const arPerNap = hasBody("ar_per_nap")
+        ? parseNonNegativeInt(req.body.ar_per_nap, Number(existing.ar_per_nap || 0))
+        : Number(existing.ar_per_nap || 0);
+
+      const darabszam = hasBody("darabszam")
+        ? parseNonNegativeInt(req.body.darabszam, Number(existing.darabszam || 0))
+        : Number(existing.darabszam || 0);
+
+      const aktiv = hasBody("aktiv")
+        ? (parseBooleanInput(req.body.aktiv, !!existing.aktiv) ? 1 : 0)
+        : Number(existing.aktiv ? 1 : 0);
+
+      const ertekeles = hasBody("ertekeles")
+        ? parseNullableNumber(req.body.ertekeles)
+        : existing.ertekeles === null || typeof existing.ertekeles === "undefined"
+        ? null
+        : Number(existing.ertekeles);
+
+      const sulyKg = hasBody("suly_kg")
+        ? parseNullableNumber(req.body.suly_kg)
+        : existing.suly_kg === null || typeof existing.suly_kg === "undefined"
+        ? null
+        : Number(existing.suly_kg);
+
+      const nextKep = getRentalImagePathFromRequest(req, existing.kep || null);
+
+      if (!nev) {
+        return res.status(400).json({ error: "A termék neve kötelező!" });
+      }
+
+      if (ertekeles !== null && (ertekeles < 0 || ertekeles > 5)) {
+        return res.status(400).json({ error: "Az értékelés 0 és 5 között lehet." });
+      }
+
+      if (sulyKg !== null && sulyKg < 0) {
+        return res.status(400).json({ error: "A súly nem lehet negatív." });
+      }
+
+      await dbPromise.query(
+        `
+        UPDATE berles_termekek
+        SET
+          nev = ?,
+          kategoria = ?,
+          marka = ?,
+          ar_per_nap = ?,
+          ertekeles = ?,
+          suly_kg = ?,
+          kep = ?,
+          leiras = ?,
+          darabszam = ?,
+          aktiv = ?
+        WHERE id = ?
+        `,
+        [
+          nev,
+          kategoria,
+          marka,
+          arPerNap,
+          ertekeles,
+          sulyKg,
+          nextKep,
+          leiras,
+          darabszam,
+          aktiv,
+          itemId,
+        ]
+      );
+
+      if (existing.kep && existing.kep !== nextKep) {
+        deleteLocalImage(existing.kep);
+      }
+
+      const [rows] = await dbPromise.query(
+        `
+        SELECT
+          id,
+          nev,
+          kategoria,
+          marka,
+          ar_per_nap,
+          ertekeles,
+          suly_kg,
+          kep,
+          leiras,
+          darabszam,
+          aktiv
+        FROM berles_termekek
+        WHERE id = ?
+        LIMIT 1
+        `,
+        [itemId]
+      );
+
+      return res.json({
+        message: "Bérlés termék sikeresen frissítve!",
+        item: mapRentalRow(rows[0]),
+      });
+    } catch (error) {
+      console.error("❌ ADMIN BÉRLÉS UPDATE HIBA:", error.message);
+      return res.status(500).json({
+        error: error.message || "Nem sikerült frissíteni a bérlés terméket.",
+      });
+    }
+  }
+);
+
+/* ===== ADMIN BÉRLÉS TERMÉK TÖRLÉS ===== */
+app.delete(
+  "/api/admin/berles-termekek/:id",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const itemId = Number(req.params.id);
+
+      if (!itemId || Number.isNaN(itemId)) {
+        return res.status(400).json({ error: "Érvénytelen termék azonosító!" });
+      }
+
+      const [rows] = await dbPromise.query(
+        "SELECT id, kep FROM berles_termekek WHERE id = ? LIMIT 1",
+        [itemId]
+      );
+
+      if (!rows.length) {
+        return res.status(404).json({ error: "A termék nem található!" });
+      }
+
+      const existing = rows[0];
+
+      await dbPromise.query("DELETE FROM berles_termekek WHERE id = ?", [itemId]);
+
+      if (existing.kep) {
+        deleteLocalImage(existing.kep);
+      }
+
+      return res.json({ message: "Bérlés termék sikeresen törölve." });
+    } catch (error) {
+      console.error("❌ ADMIN BÉRLÉS DELETE HIBA:", error.message);
+      return res.status(500).json({
+        error: error.message || "Nem sikerült törölni a bérlés terméket.",
+      });
+    }
+  }
+);
+
+/* ===== ADMIN BÉRLÉS TERMÉK STÁTUSZ ===== */
+app.put(
+  "/api/admin/berles-termekek/:id/status",
+  authMiddleware,
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const itemId = Number(req.params.id);
+
+      if (!itemId || Number.isNaN(itemId)) {
+        return res.status(400).json({ error: "Érvénytelen termék azonosító!" });
+      }
+
+      const aktiv = parseBooleanInput(req.body?.aktiv, true) ? 1 : 0;
+
+      const [rows] = await dbPromise.query(
+        "SELECT id FROM berles_termekek WHERE id = ? LIMIT 1",
+        [itemId]
+      );
+
+      if (!rows.length) {
+        return res.status(404).json({ error: "A termék nem található!" });
+      }
+
+      await dbPromise.query(
+        "UPDATE berles_termekek SET aktiv = ? WHERE id = ?",
+        [aktiv, itemId]
+      );
+
+      return res.json({
+        message: aktiv
+          ? "A bérlés termék újra aktív."
+          : "A bérlés termék inaktív lett.",
+      });
+    } catch (error) {
+      console.error("❌ ADMIN BÉRLÉS STATUS HIBA:", error.message);
+      return res.status(500).json({
+        error: error.message || "Nem sikerült frissíteni a termék státuszát.",
+      });
+    }
+  }
+);
+
 /* ===== TÚRA FOGLALÁS ===== */
 app.post("/api/foglalas", authMiddleware, async (req, res) => {
   const {
@@ -1489,6 +2236,7 @@ app.post("/api/foglalas", authMiddleware, async (req, res) => {
     emergencyPhone,
     rental,
     note,
+    paymentMethod,
     guests,
   } = req.body;
 
@@ -1511,16 +2259,19 @@ app.post("/api/foglalas", authMiddleware, async (req, res) => {
   }
 
   if (!name || !email || !phone) {
-    return res
-      .status(400)
-      .json({ error: "A foglaló neve, email címe és telefonszáma kötelező!" });
+    return res.status(400).json({
+      error: "A foglaló neve, email címe és telefonszáma kötelező!",
+    });
   }
 
   if (!emergencyName || !emergencyPhone) {
-    return res
-      .status(400)
-      .json({ error: "A vészhelyzeti kontakt adatai kötelezőek!" });
+    return res.status(400).json({
+      error: "A vészhelyzeti kontakt adatai kötelezőek!",
+    });
   }
+
+  const normalizedPaymentMethod = normalizePaymentMethod(paymentMethod);
+  const paymentStatus = getPaymentStatusFromMethod(normalizedPaymentMethod);
 
   const guestCount = Math.max(0, parsedPeople - 1);
   const normalizedGuests = (Array.isArray(guests) ? guests : [])
@@ -1532,9 +2283,9 @@ app.post("/api/foglalas", authMiddleware, async (req, res) => {
     }));
 
   if (guestCount > 0 && normalizedGuests.length !== guestCount) {
-    return res
-      .status(400)
-      .json({ error: "A vendégek száma nem egyezik a megadott létszámmal." });
+    return res.status(400).json({
+      error: "A vendégek száma nem egyezik a megadott létszámmal.",
+    });
   }
 
   for (let i = 0; i < normalizedGuests.length; i += 1) {
@@ -1571,6 +2322,8 @@ app.post("/api/foglalas", authMiddleware, async (req, res) => {
     }
 
     const tour = tourRows[0];
+    const paymentAmount = Number(tour.ar || 0) * parsedPeople;
+
     const foglalasColumns = await getTableColumnsSet("foglalasok");
     const tourIdExpr = getFoglalasTourIdExpr(foglalasColumns);
     const peopleExpr = getFoglalasPeopleExpr(foglalasColumns);
@@ -1660,6 +2413,10 @@ app.post("/api/foglalas", authMiddleware, async (req, res) => {
     pushIfExists("megjegyzes", String(note || "").trim() || null);
     pushIfExists("note", String(note || "").trim() || null);
 
+    pushIfExists("payment_method", normalizedPaymentMethod);
+    pushIfExists("payment_status", paymentStatus);
+    pushIfExists("payment_amount", paymentAmount);
+
     pushIfExists("status", "uj");
 
     if (!insertColumns.length) {
@@ -1677,6 +2434,38 @@ app.post("/api/foglalas", authMiddleware, async (req, res) => {
     );
 
     const bookingId = insertResult.insertId;
+
+    let paymentReference = null;
+    let paymentDueDate = null;
+    let bankTransfer = null;
+
+    if (normalizedPaymentMethod === "atutalas") {
+      paymentReference = getTransferReference(bookingId);
+      paymentDueDate = getFutureSqlDate(3);
+      bankTransfer = getBankTransferConfig();
+
+      const updateCols = [];
+      const updateVals = [];
+
+      if (setHas(foglalasColumns, "payment_reference")) {
+        updateCols.push("payment_reference = ?");
+        updateVals.push(paymentReference);
+      }
+
+      if (setHas(foglalasColumns, "payment_due_date")) {
+        updateCols.push("payment_due_date = ?");
+        updateVals.push(paymentDueDate);
+      }
+
+      if (updateCols.length > 0) {
+        updateVals.push(bookingId);
+
+        await connection.query(
+          `UPDATE foglalasok SET ${updateCols.join(", ")} WHERE id = ?`,
+          updateVals
+        );
+      }
+    }
 
     if (normalizedGuests.length > 0) {
       const guestColumns = await getTableColumnsSet("foglalas_vendegek");
@@ -1732,10 +2521,36 @@ app.post("/api/foglalas", authMiddleware, async (req, res) => {
 
     await connection.commit();
 
+    let emailSent = false;
+    let emailWarning = "";
+
+    try {
+      await sendBookingConfirmationEmail({
+        toEmail: String(email).trim(),
+        toName: String(name).trim(),
+        bookingId,
+        tourTitle: tour.cim,
+        date,
+        people: parsedPeople,
+        paymentMethod: normalizedPaymentMethod,
+        paymentStatus,
+        paymentAmount,
+        paymentReference,
+        paymentDueDate,
+        bankTransfer,
+      });
+
+      emailSent = true;
+    } catch (mailError) {
+      console.error("❌ BOOKING EMAIL HIBA:", mailError.message);
+      emailWarning =
+        mailError?.message || "A visszaigazoló email küldése nem sikerült.";
+    }
+
     const newJoinedCount = joinedCount + parsedPeople;
     const remainingPlaces = Math.max(0, maxPeople - newJoinedCount);
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Foglalás sikeresen rögzítve!",
       booking: {
         id: bookingId,
@@ -1747,6 +2562,26 @@ app.post("/api/foglalas", authMiddleware, async (req, res) => {
         joinedCount: newJoinedCount,
         remainingPlaces,
       },
+      payment: {
+        method: normalizedPaymentMethod,
+        methodLabel: getPaymentMethodLabel(normalizedPaymentMethod),
+        status: paymentStatus,
+        statusLabel: getPaymentStatusLabel(paymentStatus),
+        amount: paymentAmount,
+        reference: paymentReference,
+        dueDate: paymentDueDate,
+      },
+      bankTransfer:
+        normalizedPaymentMethod === "atutalas"
+          ? {
+              ...bankTransfer,
+              reference: paymentReference,
+              dueDate: paymentDueDate,
+              dueDateLabel: formatDateHu(paymentDueDate),
+            }
+          : null,
+      emailSent,
+      emailWarning,
     });
   } catch (error) {
     if (connection) {
