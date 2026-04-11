@@ -3604,16 +3604,21 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5050;
 
 async function startServer() {
-  try {
-    await ensureTables();
-
-    app.listen(PORT, () => {
-      console.log(`🚀 Backend fut a ${PORT}-es porton`);
-    });
-  } catch (error) {
-    console.error("❌ Indítási hiba:", error.message);
-    process.exit(1);
-  }
+    try {
+        await ensureTables();
+        app.listen(PORT, () => {
+            console.log(`✔ Backend fut a ${PORT}-es porton`);
+        });
+    } catch (error) {
+        console.error("✖ Indítási hiba:", error.message);
+        process.exit(1);
+    }
 }
 
-startServer();
+
+// EXPORTÁLJUK AZ APP-OT A TESZTEKHEZ
+module.exports = app;
+// ⚠️ CSAK AKKOR INDÍTSUK A SZERVERT, HA NEM TESZTELÉS FUT
+if (require.main === module) {
+    startServer();
+}

@@ -33,7 +33,7 @@ export default function Uzemeltetok() {
       image:
         "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=1200&q=80&auto=format&fit=crop",
       intro:
-        "Számomra a természet mindig az a hely volt, ahol ki lehet kapcsolni a külvilág zaját, és végre tisztábban lehet gondolkodni.",
+        "Németh Gergő vagyok az Explore cég egyik megálmodója és alapítója. A természet közelsége illetve a mozgás mindig fontos volt számomra, ezért is esett a választásom egy ilyen cégre.",
       answer:
         "Az Explore ötlete onnan jött, hogy láttuk, mennyire könnyű beleragadni a mindennapok pörgésébe. Nekem a túrázás mindig egyfajta újraindítás volt: mozgás, levegő, csend, és az az érzés, hogy végre nem minden rohan körülöttem. Ezt az élményt szeretném másoknak is átadni.",
     },
@@ -43,7 +43,7 @@ export default function Uzemeltetok() {
       image:
         "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=1200&q=80&auto=format&fit=crop",
       intro:
-        "Nekem a természet nem csak kikapcsolódás, hanem egy olyan közeg, ahol az ember fejben is helyre tud kerülni.",
+        "Papp Ármin vagyok az Explore cég egyik alapítója valamint megálmodója. A természet és a mozgás mindig fontos volt számomra, ezért is esett a választásom egy ilyen cégre mint az Explore.",
       answer:
         "Az Explore létrehozásában az motivált, hogy ne csak magunknak tartsuk meg azt, amit a túrák és a természet adni tudnak. A stresszoldás, a kiszakadás, a valódi élmények és az egyszerűbb, tisztább jelenlét szerintem mindenkinek jót tesz. Ezt akartuk egy olyan formába rakni, amit mások is megélhetnek velünk.",
     },
@@ -54,7 +54,7 @@ export default function Uzemeltetok() {
       <section className="uzem-intro">
         <div className="container">
           <SectionHead
-            title="Kik vagyunk?"
+            title="Kik vagyunk mi?"
             subtitle="Ketten állunk az Explore mögött, és mindkettőnknek ugyanaz a fontos: a természet, a feltöltődés és a valódi élmény."
           />
 
@@ -84,7 +84,7 @@ export default function Uzemeltetok() {
         <div className="container">
           <SectionHead
             title="Miért hoztuk létre az Explore-t?"
-            subtitle="Röviden: mert azt éreztük, hogy ebből a világból néha muszáj kilépni, és odakint valami sokkal tisztább vár."
+            subtitle="Röviden: mert úgy gondoltuk az embereknek szükségük van több időt a természetben tölteni a mozgással összekapcsolva."
           />
 
           <div className="interview-wrap">
@@ -116,8 +116,8 @@ export default function Uzemeltetok() {
       <section className="uzem-section">
         <div className="container">
           <SectionHead
-            title="Mit szeretnénk átadni?"
-            subtitle="Nem valami mű dolgot, hanem azt az érzést, amit mi is megtaláltunk a természetben."
+            title="Mit is szeretnénk átadni a kalandvágyóknak?"
+            subtitle="A természet adta csodát és örömöt a mozgással összeboronálva."
           />
 
           <div className="uzem-about-card glass reveal">

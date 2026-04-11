@@ -357,8 +357,7 @@ const Home = () => {
         <div className="container content reveal">
           <h1>EXPLORE.</h1>
           <p>
-            Nem csak nézni kell a természetet. Benne kell lenni. Prémium expedíciók,
-            kis csoportok, valódi kihívások.
+           Az Explore felejthetetlen élményeket nyújt a kalandoroknak.
           </p>
 
           <div className="hero-actions">
@@ -423,8 +422,8 @@ const Home = () => {
       <section id="why">
         <div className="container">
           <SectionHead
-            title="Miért EXPLORE"
-            subtitle="Komoly, tömör. Nincs körítés. Alatta vélemény."
+            title="Válszd az Explore-t."
+            subtitle="Rövid értékelések."
           />
 
           <div className="grid">
@@ -464,8 +463,8 @@ const Home = () => {
       <section id="nature">
         <div className="container">
           <SectionHead
-            title="Miért jó kint a természetben"
-            subtitle="Komoly, tömör. Nem regény."
+            title="Pozitív hatásai a természetnek"
+            subtitle="Pozitívumaink össezgzése"
           />
 
           <div className="nature-cols">
@@ -502,8 +501,8 @@ const Home = () => {
       <section id="spotify" className="spotify-section">
         <div className="container">
           <SectionHead
-            title="Hangulat: túra mód"
-            subtitle="Stabil ritmus, tiszta fej, jó tempó. Nem motivációs cringe."
+            title="Explore Hangulat"
+            subtitle="Egy rövid playlist, hogy ráhangolódj a természetre."
           />
 
           <div ref={spotifyRef} className={`spotify-card glass ${spotifyIn ? "in" : ""}`}>
@@ -511,12 +510,11 @@ const Home = () => {
               <div className="spotify-kicker">SPOTIFY · PLAYLIST</div>
               <h3>EXPLORE — Outdoor Focus</h3>
               <p>
-                Ez a lista arra van, hogy <strong>ne szétesve</strong> menj végig.
-                Aláfekszik a tempónak, nem viszi el a figyelmet.
+                Vedd fel az <strong>Explore</strong> hangulatát.
+                Élvezd a közös pillanatokat az Explore -nál
               </p>
               <p className="spotify-mini">
-                Tipp: indulás előtt nyomd be, és hagyd menni. A döntések meg jönnek
-                maguktól.
+                Tipp: Indíts egy zenét irány majd irány a természetbe.
               </p>
             </div>
 
@@ -542,7 +540,7 @@ const Home = () => {
         <div className="container">
           <SectionHead
             title="Galéria"
-            subtitle="Nagy preview, jobb navigáció, tisztább thumb sor. ← → billentyűvel is megy."
+            subtitle="Betekintés az eddigi túráinkba."
           />
 
           <div
