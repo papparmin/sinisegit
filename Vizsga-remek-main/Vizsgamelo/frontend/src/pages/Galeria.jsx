@@ -253,8 +253,7 @@ export default function Galeria() {
 
         <p className="explore-gallery-lead">
           Magyarország kedvenc helyei mellé bekerült egy alpesi kedvenc is.
-          Pinterestes hangulat, üveges EXPLORE dizájn, normális nagyítás és
-          helyszín szerinti szűrés.
+          Ami az Ausztriai táj szépségét tükrözi vissza nekünk.
         </p>
       </section>
 

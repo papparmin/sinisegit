@@ -31,7 +31,7 @@ const Home = () => {
   const featuredTours = [
     {
       badge: "TÉL / PROFI",
-      img: "https://images.unsplash.com/photo-1454496522488-7a8e488e8606?w=1600",
+      img: "https://funzine.hu/wp-content/uploads/2022/11/Kilatas-Galya-tetorol-Foto-Hatvan-Aniko3-850x572.jpg?w=1600",
       title: "Téli Mátra Gerinctúra",
       desc: "Havas gerincek Kékes és Galyatető között. Hidegmenedzsment és tájékozódás.",
       dur: "2 Nap / 1 Éj",
@@ -40,7 +40,7 @@ const Home = () => {
     },
     {
       badge: "VÍZ / KEZDŐ",
-      img: "https://images.unsplash.com/photo-1544550581-5f7ceaf7f992?w=1600",
+      img: "https://vizitura.hu/wp-content/gallery/gemenc-vizitura/gemenci-erdo-vizitura-1118.jpg?width=1600",
       title: "Gemenci Vízivilág",
       desc: "Kenuzás Európa egyik legnagyobb ártéri erdejében. Tábor a víz közelében.",
       dur: "3 Nap / 2 Éj",
@@ -76,7 +76,7 @@ const Home = () => {
     },
     {
       badge: "TÓ / KEZDŐ",
-      img: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=1600",
+      img: "https://kirandulastippek.hu/thumbnail//images/fusine-a-meses-also-to.jpg?3072,2304,width=1600",
       title: "Tavi Tábor & Túra",
       desc: "Kényelmes túra, tanulható táborozás, esti tűz és chill. Ideális első tábor.",
       dur: "2 Nap / 1 Éj",
@@ -383,7 +383,7 @@ const Home = () => {
       <section id="tours">
         <div className="container">
           <SectionHead
-            title="Ajánlott túráink"
+            title="Eddigi túráink"
             subtitle="Válogatott útvonalak, átlátható infó. Foglalj gyorsan, ha kell a hely."
           />
 
