@@ -9,7 +9,7 @@ Az Explore egy komplex, full-stack webalkalmazás, amely egyetlen letisztult fel
 
 ##  Tartalomjegyzék
 - [A projekt célkitűzése](#A-projekt-célkitűzése)
-- Fő funkciók és modulok  
+- [Fő funkciók és modulok](#Fő-funkciók-és-modulok)  
 - Technológiai Stack  
 - Csapatmunka és Feladatkörök  
 - Adatbázis architektúra  
